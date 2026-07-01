@@ -1,7 +1,7 @@
 # Golden Path MCP Evolution — Architecture Document
 
 > **Source:** [golden-path-mcp-evolution-proposal.md](./golden-path-mcp-evolution-proposal.md) (stakeholder proposal, 2026-06-15)  
-> **Generated:** 2026-06-24 | **Implementation reference:** v0.3.8 (`goldenpath` repo)  
+> **Generated:** 2026-06-24 | **Implementation reference:** v0.3.7 (`goldenpath` repo)  
 > **Audience:** Platform / DevEx, engineering leads, security, SRE, executives  
 >
 > **Render diagrams:** Paste any `mermaid` code block into [Mermaid Live Editor](https://mermaid.live/) or view in GitHub.
@@ -14,7 +14,7 @@ The MCP evolution proposal reframes Golden Path from a **three-channel distribut
 
 In plain terms: developers still deploy through **GitHub Actions → GCP Cloud Run**. MCP does not replace that path. It ensures every engineer and AI client reads the **same version** of skills, docs, and tool contracts — eliminating local skill drift and multi-channel confusion.
 
-**v0.3.8 status:** The evolved model is **largely implemented**. Layer A is shipped; MCP serves 3 Resources and 13 Tools; CLI and wizard remain first-class fallbacks. Gaps vs the proposal: hosted auth uses **API key** today (SSO/OIDC deferred to org reverse proxy); release channels are **metadata-first** (content pinned at image build for hosted, filesystem for local stdio).
+**v0.3.7 status:** The evolved model is **largely implemented**. Layer A is shipped; MCP serves 3 Resources and 13 Tools; CLI and wizard remain first-class fallbacks. Gaps vs the proposal: hosted auth uses **API key** today (SSO/OIDC deferred to org reverse proxy); release channels are **metadata-first** (content pinned at image build for hosted, filesystem for local stdio).
 
 **Design rule (unchanged):**
 
@@ -127,7 +127,7 @@ flowchart LR
 
 **What you're looking at:** GitHub holds everything authoritative. **Layer A** produces **service repos**. **MCP** reads `skills/` and `docs/` through `ContentStore` and exposes them as Resources, plus Tools for GCP/GitHub/scaffold actions. **CLI and wizards** remain parallel onboarding paths (proposal: "1 primary MCP + optional CLI"). **GitHub Actions** is the only production deploy engine.
 
-**Proposal vs v0.3.8:**
+**Proposal vs v0.3.7:**
 
 | Proposal container | Implementation |
 |------------------|----------------|
@@ -181,7 +181,7 @@ flowchart TD
 
 ### 3b. Resource URI map (proposal → implementation)
 
-| Proposal URI | v0.3.8 URI | On-disk path |
+| Proposal URI | v0.3.7 URI | On-disk path |
 |--------------|------------|--------------|
 | `goldenpath://skills/{name}/SKILL.md` | ✅ Same | `skills/{name}/SKILL.md` |
 | `goldenpath://docs/{path}` | ✅ Same | `docs/{path}` (with aliases) |
@@ -209,7 +209,7 @@ flowchart LR
         W4["list_templates"]:::v2
     end
 
-    subgraph shipped ["v0.3.8 — all shipped"]
+    subgraph shipped ["v0.3.7 — all shipped"]
         ALL["13 tools\n+ helper read tools\nlist_skills get_doc etc."]:::v2
     end
 
@@ -217,7 +217,7 @@ flowchart LR
     proposed_v2 --> shipped
 ```
 
-**What you're looking at:** The proposal phased read tools before writes. **v0.3.8 shipped both phases together**, plus helper tools (`list_skills`, `get_doc`, `list_docs`) for clients with weak Resource support — exactly as the proposal suggested as optional.
+**What you're looking at:** The proposal phased read tools before writes. **v0.3.7 shipped both phases together**, plus helper tools (`list_skills`, `get_doc`, `list_docs`) for clients with weak Resource support — exactly as the proposal suggested as optional.
 
 **Intentionally not MCP tools** (bootstrap, `shop publish`, teardown): CLI/wizard only — preserves CI-independent critical path.
 
@@ -287,7 +287,7 @@ sequenceDiagram
 flowchart LR
     classDef ch fill:#16A085,color:#fff
 
-    stable["channel: stable\n→ tag v0.3.8"]:::ch
+    stable["channel: stable\n→ tag v0.3.7"]:::ch
     beta["channel: beta\n→ tag v0.4.0-rc1"]:::ch
     main["channel: main\nplatform internal"]:::ch
 
@@ -300,7 +300,7 @@ flowchart LR
     beta -.-> MCP
 ```
 
-**v0.3.8 reality:** `GOLDENPATH_CHANNEL` and `get_version` expose channel metadata. Switching channels to different git content dynamically on hosted MCP requires **redeploying the MCP image** with updated bundle — not hot-swapping refs at runtime as the proposal diagram implies.
+**v0.3.7 reality:** `GOLDENPATH_CHANNEL` and `get_version` expose channel metadata. Switching channels to different git content dynamically on hosted MCP requires **redeploying the MCP image** with updated bundle — not hot-swapping refs at runtime as the proposal diagram implies.
 
 ### 4d. Critical path independence (fallbacks)
 

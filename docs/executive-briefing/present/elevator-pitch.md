@@ -1,6 +1,6 @@
 # Golden Path — Elevator Pitch
 
-**Version:** v0.3.8
+**Version:** v0.3.7
 
 ---
 

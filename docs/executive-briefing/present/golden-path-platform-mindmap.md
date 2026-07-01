@@ -1,4 +1,4 @@
-# Golden Path Platform — Mind Map (v0.3.8)
+# Golden Path Platform — Mind Map (v0.3.7)
 
 **Audience:** Executives, business stakeholders, technical leads  
 **Purpose:** Single-page visual map of the entire platform — configuration, core, onboarding paths, runtime, and support processes  
@@ -10,7 +10,7 @@
 
 ```mermaid
 mindmap
-  root((Golden Path Platform v0.3.8))
+  root((Golden Path Platform v0.3.7))
     Configuration Spine
       enterprise.env
         Billing
@@ -157,7 +157,7 @@ flowchart LR
 <summary>Click to expand full outline</summary>
 
 ```
-Golden Path Platform (v0.3.8)
+Golden Path Platform (v0.3.7)
 ├── Configuration Spine
 │   ├── config/enterprise.env
 │   │   ├── Billing: PARENT_PROJECT_ID, BILLING_ACCOUNT_ID

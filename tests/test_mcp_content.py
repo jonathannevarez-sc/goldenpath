@@ -42,9 +42,9 @@ def test_read_catalog(temp_repo: Path) -> None:
 
 def test_meta_version(temp_repo: Path) -> None:
     store = ContentStore(temp_repo)
-    meta = store.meta_version("stable", "v0.3.8")
+    meta = store.meta_version("stable", "v0.3.7")
     assert meta["channel"] == "stable"
-    assert meta["version"] == "v0.3.8"
+    assert meta["version"] == "v0.3.7"
     assert meta["skills_count"] >= 1
     assert meta["docs_count"] >= 1
 

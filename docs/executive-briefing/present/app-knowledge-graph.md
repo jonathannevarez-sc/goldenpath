@@ -1,6 +1,6 @@
 # Golden Path — App Knowledge Graph
 
-**Platform version:** v0.3.8  
+**Platform version:** v0.3.7  
 **Audience:** Platform engineers, architects, AI agents, executive technical briefings  
 **Purpose:** Machine- and human-readable map of Golden Path components, flows, and relationships.
 
@@ -8,7 +8,7 @@
 
 ## Knowledge Base Overview
 
-Golden Path is an enterprise-configurable paved road for building and deploying containerized services to Google Cloud Platform. This knowledge graph encodes the **v0.3.8** platform as a structured graph: configuration (`config/enterprise.env`) drives all paths; **platform core** (bootstrap, modules, templates, workflows) produces service artifacts; **runtime** (Cloud Run, Artifact Registry, Secret Manager, WIF) hosts deployed services. Three onboarding paths — **CLI** (`cli/shop`), **wizard** (four backends), and **MCP** (`mcp/goldenpath_mcp`, 13 tools, 6 skills) — converge on identical outputs: a scaffolded service repo and deployment via the reusable `.github/workflows/deploy.yml`. The graph below is the canonical reference for onboarding agents, generating architecture diagrams, gap analysis, and upgrade planning.
+Golden Path is an enterprise-configurable paved road for building and deploying containerized services to Google Cloud Platform. This knowledge graph encodes the **v0.3.7** platform as a structured graph: configuration (`config/enterprise.env`) drives all paths; **platform core** (bootstrap, modules, templates, workflows) produces service artifacts; **runtime** (Cloud Run, Artifact Registry, Secret Manager, WIF) hosts deployed services. Three onboarding paths — **CLI** (`cli/shop`), **wizard** (four backends), and **MCP** (`mcp/goldenpath_mcp`, 13 tools, 6 skills) — converge on identical outputs: a scaffolded service repo and deployment via the reusable `.github/workflows/deploy.yml`. The graph below is the canonical reference for onboarding agents, generating architecture diagrams, gap analysis, and upgrade planning.
 
 ---
 
@@ -18,7 +18,7 @@ Golden Path is an enterprise-configurable paved road for building and deploying 
 {
   "metadata": {
     "platform": "goldenpath",
-    "version": "v0.3.8",
+    "version": "v0.3.7",
     "generated": "2026-06-24",
     "node_types": [
       "UIComponent",
@@ -766,7 +766,7 @@ flowchart LR
 > Paste into [Markmap](https://markmap.js.org/) or any nested-outline viewer.
 
 ```markdown
-# Golden Path Platform (v0.3.8)
+# Golden Path Platform (v0.3.7)
 ## Configuration Spine
 ### config/enterprise.env
 #### Billing: PARENT_PROJECT_ID, BILLING_ACCOUNT_ID
@@ -878,7 +878,7 @@ flowchart LR
 
 ## Why This is a Gold Mine
 
-- **Single source of truth** — Replaces scattered wiki pages with a versioned, queryable graph tied to `v0.3.8` file paths.
+- **Single source of truth** — Replaces scattered wiki pages with a versioned, queryable graph tied to `v0.3.7` file paths.
 - **AI-native onboarding** — MCP agents can ingest the JSON graph to plan scaffold/deploy sequences without hallucinating repo layout.
 - **Path convergence visibility** — Proves CLI, wizard, and MCP produce identical artifacts — critical for enterprise rollout confidence.
 - **Security traceability** — Every write path (shop publish, MCP scaffold/trigger) maps to audit, WIF, and IAM edges.

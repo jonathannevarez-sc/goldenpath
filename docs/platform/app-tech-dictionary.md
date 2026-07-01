@@ -1,6 +1,6 @@
 # goldenpath — app tech stack dictionary
 
-> **Generated:** 2026-06-16 | **Version:** v0.3.8 (Phase 1 + Phase 2, enterprise-agnostic) — repo `goldenpath` (enterprise-agnostic)
+> **Generated:** 2026-06-16 | **Version:** v0.3.7 (Phase 1 + Phase 2, enterprise-agnostic) — repo `goldenpath` (enterprise-agnostic)
 >
 > **How to use:** This document is a standalone, offline-ready reference for every technology used in the goldenpath platform. Browse by category, jump via the TOC, or `Ctrl+F` a term. Each entry is phrased to be directly quotable in technical articles and blog posts.
 
@@ -1329,7 +1329,7 @@
 
 **Definition:** `cli/shop` is the Golden Path terminal CLI (Bash, ~475 lines) for scaffolding and deploying services. It reads `templates/catalog.json`, copies templates, replaces tokens, and orchestrates GitHub + GCP publish flows. Separate from the setup wizard — uses `.goldenpath-cli.local.json`.
 
-**Origin/History:** Phase 1 (`shop new`, `shop list`); extended with `publish`, `verify`, `doctor`, `upgrade`, `config` for one-command deploy. Platform pin from `GOLDENPATH_VERSION` in `enterprise.env` (currently `v0.3.8`).
+**Origin/History:** Phase 1 (`shop new`, `shop list`); extended with `publish`, `verify`, `doctor`, `upgrade`, `config` for one-command deploy. Platform pin from `GOLDENPATH_VERSION` in `enterprise.env` (currently `v0.3.7`).
 
 **Purpose in App:**
 
@@ -1548,7 +1548,7 @@ When an AI agent loads a skill via `get_skill("deploy-to-shop-gcp")`, it receive
 | git | Dev Tool | Version control system | system |
 | PowerShell (pwsh) | Language/Runtime | Setup wizard + PS modules | 7+ |
 | Pester | Test Framework | PowerShell wizard unit tests | 5+ |
-| shop CLI | Platform Tool | Scaffold + publish CLI (Bash) | `goldenpath_ops_cli.py`; pin `v0.3.8` |
+| shop CLI | Platform Tool | Scaffold + publish CLI (Bash) | `goldenpath_ops_cli.py`; pin `v0.3.7` |
 | Setup Wizard | Platform Tool | 4 backends (PS/bash/py/Streamlit) | — |
 | check-repo-hygiene.sh | Platform Tool | Repo layout health check | — |
 | Private workflow access | Platform Concept | Private caller repos for private platform | — |

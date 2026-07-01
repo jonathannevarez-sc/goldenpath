@@ -274,7 +274,7 @@ function Show-Usage {
       ../<service-name>/   by default
 
     Templates: nextjs (default), fastapi, streamlit, express, react-spa, svelte-spa
-    Pins workflow to GOLDENPATH_VERSION from enterprise.env (currently v0.3.8).
+    Pins workflow to GOLDENPATH_VERSION from enterprise.env (currently v0.3.7).
 
     Publish does (in order):
       [1/5] Create GitHub repo (visibility matches platform repo)

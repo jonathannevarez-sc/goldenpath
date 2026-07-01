@@ -340,7 +340,7 @@ Close §7 (Skill distribution) as: **MCP Resources from pinned git releases, wit
 
 ---
 
-## Related analysis (v0.3.8)
+## Related analysis (v0.3.7)
 
 - [Coverage check](./golden-path-mcp-evolution-coverage-check.md) — requirement-by-requirement: does the project cover what the proposal asked for?
 - [Parity analysis](./golden-path-mcp-evolution-parity-analysis.md) — side-by-side: how closely does delivery match proposal shape and intent?

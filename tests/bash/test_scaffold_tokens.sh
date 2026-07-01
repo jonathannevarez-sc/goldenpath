@@ -45,7 +45,7 @@ test_end
 test_start "replace_tokens substitutes workflow placeholders"
 replace_tokens "${SERVICE_DIR}" "my-service" "my-org" "goldenpath" \
   "dev-project" "prod-project" "us-central1" "python" "/api/health" \
-  "8000" "v0.3.8" "shop-services"
+  "8000" "v0.3.7" "shop-services"
 assert_exit 1 deploy_has_tokens "${SERVICE_DIR}"
 workflow="$(cat "${SERVICE_DIR}/.github/workflows/deploy.yml")"
 assert_match "my-service" "$workflow"
@@ -82,7 +82,7 @@ STALE_DIR="${TMP_ROOT}/stale-service"
 mkdir -p "${STALE_DIR}/.github/workflows"
 cp "${REPO_ROOT}/templates/fastapi/.github/workflows/deploy.yml" "${STALE_DIR}/.github/workflows/deploy.yml"
 cp "${REPO_ROOT}/templates/fastapi/requirements.txt" "${STALE_DIR}/requirements.txt"
-export SHOP_GITHUB_ORG=test-org SHOP_GOLDENPATH_REPO=goldenpath SHOP_GOLDENPATH_VERSION=v0.3.8
+export SHOP_GITHUB_ORG=test-org SHOP_GOLDENPATH_REPO=goldenpath SHOP_GOLDENPATH_VERSION=v0.3.7
 export SHOP_GCP_DEV_PROJECT=my-valid-project SHOP_GCP_PROD_PROJECT=my-valid-project SHOP_GCP_REGION=us-central1
 export SHOP_ARTIFACT_REGISTRY_REPO=shop-services ARTIFACT_REGISTRY_REPO=shop-services
 set +e

@@ -18,7 +18,7 @@ out="$(
   SHOP_GCP_PROD_PROJECT=my-valid-project \
   SHOP_GCP_REGION=europe-west1 \
   SHOP_GOLDENPATH_REPO=goldenpath \
-  SHOP_GOLDENPATH_VERSION=v0.3.8 \
+  SHOP_GOLDENPATH_VERSION=v0.3.7 \
   "${SHOP}" config set \
     --github-org config-org \
     --gcp-dev my-valid-project \

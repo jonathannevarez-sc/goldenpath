@@ -84,7 +84,7 @@ Or: GitHub UI → Actions → **Deploy** → Run workflow → `prod`
 | Terraform module fetch failed | Reusable workflow configures git for private `goldenpath` modules; check `GOLDENPATH_MODULE_TOKEN` if private |
 | Image pull failed | Image must be Artifact Registry (`*-docker.pkg.dev/*`); `artifact_registry_repo` must match bootstrap repo |
 | Health check failed | Match template health path from `list_templates()` |
-| Stale `deploy.yml` pin (v0.3.0–v0.3.6) | `shop upgrade <dir>` or wizard publish (**7**) — only **v0.3.8** tag exists |
+| Stale `deploy.yml` pin (v0.3.0–v0.3.6) | `shop upgrade <dir>` or wizard publish (**7**) — only **v0.3.7** tag exists |
 | `gh account ≠ GITHUB_ORG` | `gh auth switch --user <GITHUB_ORG>` |
 | 403 on Cloud Run | Check IAM / invoker settings (`allow_unauthenticated` on dev only) |
 

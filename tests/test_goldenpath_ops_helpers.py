@@ -79,11 +79,11 @@ class TestUpgradePlatformPins:
         )
         result = ops.scaffold("pin-svc", "fastapi", temp_repo / "out", cfg)
         deploy = result.service_dir / ".github/workflows/deploy.yml"
-        stale = deploy.read_text().replace("v0.3.8", "v0.3.0")
+        stale = deploy.read_text().replace("v0.3.7", "v0.3.0")
         deploy.write_text(stale)
         ops.upgrade_platform_pins(result.service_dir, cfg)
         text = deploy.read_text()
-        assert "@v0.3.8" in text
+        assert "@v0.3.7" in text
         assert "test-org/goldenpath" in text
         assert "@v0.3.0" not in text
 

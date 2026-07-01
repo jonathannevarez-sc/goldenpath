@@ -14,7 +14,7 @@ try {
     $Config = @{
         github_org           = 'test-org'
         github_platform_repo = 'goldenpath'
-        goldenpath_version   = 'v0.3.8'
+        goldenpath_version   = 'v0.3.7'
         gcp_dev_project      = 'gp-test-smoke-01'
         gcp_prod_project     = 'gp-test-smoke-01'
         gcp_region           = 'us-central1'

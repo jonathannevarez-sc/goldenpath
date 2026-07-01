@@ -1,7 +1,7 @@
 # Golden Path MCP Evolution — Gap Analysis
 
 **Source document:** [golden-path-mcp-evolution-proposal.md](./golden-path-mcp-evolution-proposal.md) (stakeholder proposal, 2026-06-15)  
-**Compared against:** `goldenpath` repository **v0.3.8** (as of 2026-06-24)  
+**Compared against:** `goldenpath` repository **v0.3.7** (as of 2026-06-24)  
 **Audience:** Executives, product owners, engineers, security — all levels  
 **Companion documents:** [Coverage check](./golden-path-mcp-evolution-coverage-check.md) · [Parity analysis](./golden-path-mcp-evolution-parity-analysis.md) · [Architecture](./golden-path-mcp-evolution-architecture.md)
 
@@ -77,7 +77,7 @@ None of these block a pilot team from scaffolding and deploying. They **do** blo
 | Field | Detail |
 |-------|--------|
 | **Proposal says** | §56, §139: MCP serves pinned git ref; `stable` / `beta` channels enforced |
-| **Reality today** | `ContentStore` reads local filesystem; Docker **COPY** at build (`mcp/Dockerfile` sets `GOLDENPATH_VERSION=v0.3.8`) |
+| **Reality today** | `ContentStore` reads local filesystem; Docker **COPY** at build (`mcp/Dockerfile` sets `GOLDENPATH_VERSION=v0.3.7`) |
 | **Impact** | `beta` channel is metadata-only on hosted — cannot serve different content without new image |
 | **Who feels it** | Platform team running release trains; pilot teams expecting hot channel switch |
 | **Suggested fix** | Option A: multi-image deploy per channel. Option B: sidecar git-sync volume. Option C: runtime fetch from GitHub API at pinned tag |
@@ -279,7 +279,7 @@ G6 (off-road policy) ──► Support model clarity (independent)
 
 ### For product / program
 
-1. Update stakeholder materials: version **v0.3.8**, not proposal example v1.4.0.  
+1. Update stakeholder materials: version **v0.3.7**, not proposal example v1.4.0.  
 2. Track **G1–G4** on public roadmap.  
 3. Resolve G4 by **either** adding `publish_service` **or** revising Phase 2 exit criterion.  
 4. Define Phase 3 metrics (time-to-first-dev-deploy, % templated services) before GA.
@@ -311,7 +311,7 @@ These are sometimes reported as gaps but match the proposal or platform guide:
 | Teardown not in MCP | Safety — destructive ops stay in guarded scripts |
 | Backstage portal missing | Proposal defers to Phase 3+ |
 | 6 templates vs 1 | Exceeds proposal — not a deficiency |
-| v0.3.8 vs v1.4.0 example | Same versioning model |
+| v0.3.7 vs v1.4.0 example | Same versioning model |
 
 ---
 
@@ -331,7 +331,7 @@ These are sometimes reported as gaps but match the proposal or platform guide:
 
 | Version | Date | Notes |
 |---------|------|-------|
-| 1.0 | 2026-06-24 | Initial gap analysis vs v0.3.8 (split from combined doc) |
+| 1.0 | 2026-06-24 | Initial gap analysis vs v0.3.7 (split from combined doc) |
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## A simple guide  
 
-**Platform version:** v0.3.8 · **Date:** 2026-06-24
+**Platform version:** v0.3.7 · **Date:** 2026-06-24
 
 ---
 

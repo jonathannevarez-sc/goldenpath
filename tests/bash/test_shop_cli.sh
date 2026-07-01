@@ -46,7 +46,7 @@ out="$(
   SHOP_GCP_PROD_PROJECT=my-valid-project \
   SHOP_GCP_REGION=us-central1 \
   SHOP_GOLDENPATH_REPO=goldenpath \
-  SHOP_GOLDENPATH_VERSION=v0.3.8 \
+  SHOP_GOLDENPATH_VERSION=v0.3.7 \
   "${SHOP}" new my-dry-run-svc --template fastapi --dry-run --output "${TMP_ROOT}" 2>&1
 )"
 code=$?
@@ -64,7 +64,7 @@ out="$(
   SHOP_GCP_PROD_PROJECT=my-valid-project \
   SHOP_GCP_REGION=us-central1 \
   SHOP_GOLDENPATH_REPO=goldenpath \
-  SHOP_GOLDENPATH_VERSION=v0.3.8 \
+  SHOP_GOLDENPATH_VERSION=v0.3.7 \
   "${SHOP}" new --print-config --template fastapi 2>&1
 )"
 code=$?
@@ -93,7 +93,7 @@ out="$(
   SHOP_GCP_PROD_PROJECT=my-valid-project \
   SHOP_GCP_REGION=us-central1 \
   SHOP_GOLDENPATH_REPO=goldenpath \
-  SHOP_GOLDENPATH_VERSION=v0.3.8 \
+  SHOP_GOLDENPATH_VERSION=v0.3.7 \
   "${SHOP}" new --config "$conf" --output "${TMP_ROOT}" 2>&1
 )"
 code=$?

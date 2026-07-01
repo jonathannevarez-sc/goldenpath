@@ -88,7 +88,7 @@ class TestMergeSavedConfig:
     def test_resolve_goldenpath_version_from_enterprise_env(
         self, temp_repo: Path, sample_enterprise_env: Path
     ) -> None:
-        assert wd.resolve_goldenpath_version(temp_repo) == "v0.3.8"
+        assert wd.resolve_goldenpath_version(temp_repo) == "v0.3.7"
 
     def test_apply_enterprise_env_overrides_github_org(
         self, temp_repo: Path, sample_enterprise_env: Path
@@ -96,18 +96,18 @@ class TestMergeSavedConfig:
         cfg = {"github_org": "stale-org", "goldenpath_version": "v0.3.0"}
         wd.apply_enterprise_env_overrides(cfg, temp_repo)
         assert cfg["github_org"] == "my-github-org"
-        assert cfg["goldenpath_version"] == "v0.3.8"
+        assert cfg["goldenpath_version"] == "v0.3.7"
 
     def test_enterprise_env_wins_for_goldenpath_version(
         self, temp_repo: Path, sample_enterprise_env: Path, wizard_config_path: Path
     ) -> None:
-        # enterprise.env already pins v0.3.8 via conftest fixture
+        # enterprise.env already pins v0.3.7 via conftest fixture
         write_json(
             wizard_config_path,
             {"goldenpath_version": "v0.3.0", "last_service": "stale"},
         )
         cfg = wd.merge_saved_config(wizard_config_path, temp_repo)
-        assert cfg["goldenpath_version"] == "v0.3.8"
+        assert cfg["goldenpath_version"] == "v0.3.7"
         assert cfg["last_service"] == "stale"
 
     def test_strips_invalid_wif_values(

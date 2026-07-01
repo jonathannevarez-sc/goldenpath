@@ -72,7 +72,7 @@ scaffold_service(
 shop new orders-api --template fastapi --output ..
 ```
 
-Workflow tag comes from `GOLDENPATH_VERSION` in `config/enterprise.env` (example: `v0.3.8`). Tfvars include `artifact_registry_repo` from `ARTIFACT_REGISTRY_REPO`.
+Workflow tag comes from `GOLDENPATH_VERSION` in `config/enterprise.env` (example: `v0.3.7`). Tfvars include `artifact_registry_repo` from `ARTIFACT_REGISTRY_REPO`.
 
 ---
 

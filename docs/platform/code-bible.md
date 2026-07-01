@@ -623,7 +623,7 @@ This section walks through every required source file with **line-by-line explan
 | 18–20 | `GCP_SANDBOX_PROJECT` / `SANDBOX_PROJECT_NAME` / `SANDBOX_PROJECT_LABELS` | Isolated sandbox for personal/CI testing |
 | 23 | `GCP_REGION=us-central1` | Default region for Cloud Run and Artifact Registry |
 | 26–27 | `GITHUB_ORG` / `PLATFORM_REPO` | GitHub organization and platform repo name |
-| 30 | `GOLDENPATH_VERSION=v0.3.8` | Version tag for reusable deploy workflows |
+| 30 | `GOLDENPATH_VERSION=v0.3.7` | Version tag for reusable deploy workflows |
 | 33–34 | `ARTIFACT_REGISTRY_REPO` / `MCP_SERVICE_NAME` | Shared naming conventions |
 | 38 | `PROTECTED_PROJECTS=...` | Comma-separated list teardown scripts must **never** delete |
 | 41 | `ALLOWED_TEARDOWN_PROJECTS=` | Optional allowlist; empty means any non-protected sandbox |
@@ -1658,7 +1658,7 @@ A comprehensive reference of terms used in Golden Path and cloud-native developm
 
 **Secret Env** — Terraform `secret_env` map for Secret Manager references.
 
-**Semantic Versioning** — Version format like `v0.3.8`; `GOLDENPATH_VERSION`.
+**Semantic Versioning** — Version format like `v0.3.7`; `GOLDENPATH_VERSION`.
 
 **Service Account** — GCP identity for workloads; `service_account_email` in Terraform.
 

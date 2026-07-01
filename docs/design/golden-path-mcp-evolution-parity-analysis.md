@@ -1,7 +1,7 @@
 # Golden Path MCP Evolution — Parity Analysis
 
 **Source document:** [golden-path-mcp-evolution-proposal.md](./golden-path-mcp-evolution-proposal.md) (stakeholder proposal, 2026-06-15)  
-**Compared against:** `goldenpath` repository **v0.3.8** (as of 2026-06-24)  
+**Compared against:** `goldenpath` repository **v0.3.7** (as of 2026-06-24)  
 **Audience:** Executives, product owners, engineers, security — all levels  
 **Companion documents:** [Coverage check](./golden-path-mcp-evolution-coverage-check.md) · [Gap analysis](./golden-path-mcp-evolution-gap-analysis.md) · [Architecture](./golden-path-mcp-evolution-architecture.md)
 
@@ -59,7 +59,7 @@ The project also built **more than the blueprint asked for**: six app templates 
 
 ## Distribution model — side by side
 
-| Dimension | Proposal (2026-06-15) | Project (v0.3.8) | Parity |
+| Dimension | Proposal (2026-06-15) | Project (v0.3.7) | Parity |
 |-----------|----------------------|------------------|--------|
 | **Primary integration** | 1 (MCP) + optional CLI | MCP + **CLI + wizard** (3 paths) | ⚠️ Broader than “one path” wording |
 | **Knowledge delivery** | MCP Resources from pinned git | MCP Resources from repo root / Docker COPY | ⚠️ Same UX, different backend |
@@ -68,7 +68,7 @@ The project also built **more than the blueprint asked for**: six app templates 
 | **Skill delivery** | No local canonical copies | MCP-only distribution documented | ✅ |
 | **Hosted transport** | HTTPS internal MCP | Cloud Run `streamable-http` + SSE | ✅ |
 | **Hosted auth** | SSO/OIDC | `MCP_API_KEY` Bearer/header | ⚠️ |
-| **Version example** | Tag e.g. `v1.4.0` | Tag **`v0.3.8`** | ✅ (different number, same model) |
+| **Version example** | Tag e.g. `v1.4.0` | Tag **`v0.3.7`** | ✅ (different number, same model) |
 | **Release channels** | `stable`, `beta`, `main` (internal) | Env vars + Dockerfile default | ⚠️ Metadata yes; hot-swap partial |
 | **Branding** | “Shop” in diagrams | Enterprise-agnostic `goldenpath` | ➕ Evolution beyond proposal |
 | **Critical path** | GitHub Actions → GCP | Same — `workflow_call` deploy | ✅ |
@@ -84,7 +84,7 @@ The project also built **more than the blueprint asked for**: six app templates 
 
 ## Developer experience — fresh laptop journey
 
-| Step | Proposal | Project (v0.3.8) | Parity |
+| Step | Proposal | Project (v0.3.7) | Parity |
 |------|----------|------------------|--------|
 | 1 | Add MCP URL + SSO to client | MCP config + API key (hosted) or stdio (local) | ⚠️ |
 | 2 | Docs served as MCP Resources | `get_doc` / `goldenpath://docs/*` | ✅ |
@@ -210,7 +210,7 @@ The proposal diagrams use **Shop** naming (`scaffold-service`, `deploy-to-shop-g
 |---------------|--------------|--------|
 | `scaffold-service` | `scaffold-shop-service` | ⚠️ |
 | `goldenpath` (repo) | `goldenpath` | ✅ |
-| `v1.4.0` (example tag) | `v0.3.8` | ✅ (versioning model, not number) |
+| `v1.4.0` (example tag) | `v0.3.7` | ✅ (versioning model, not number) |
 | `shop new` CLI | `cli/shop` | ⚠️ Legacy CLI name |
 
 This does not block function — MCP URIs use folder names — but **diagrams and stakeholder decks** should use actual skill folder names to avoid confusion.
@@ -307,7 +307,7 @@ These are the **material differences** between proposal intent and project deliv
 
 | Version | Date | Notes |
 |---------|------|-------|
-| 1.0 | 2026-06-24 | Initial parity analysis vs v0.3.8 (split from combined doc) |
+| 1.0 | 2026-06-24 | Initial parity analysis vs v0.3.7 (split from combined doc) |
 
 ---
 

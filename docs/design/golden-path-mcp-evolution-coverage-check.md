@@ -1,7 +1,7 @@
 # Golden Path MCP Evolution — Coverage Check
 
 **Source document:** [golden-path-mcp-evolution-proposal.md](./golden-path-mcp-evolution-proposal.md) (stakeholder proposal, 2026-06-15)  
-**Compared against:** `goldenpath` repository **v0.3.8** (as of 2026-06-24)  
+**Compared against:** `goldenpath` repository **v0.3.7** (as of 2026-06-24)  
 **Audience:** Executives, product owners, engineers, security — all levels  
 **Companion documents:** [Parity analysis](./golden-path-mcp-evolution-parity-analysis.md) · [Gap analysis](./golden-path-mcp-evolution-gap-analysis.md) · [Architecture](./golden-path-mcp-evolution-architecture.md)
 
@@ -159,7 +159,7 @@ All `docs/**/*.md` files are listable via `list_docs()` and readable via `get_do
 
 | Safeguard | Status | Evidence |
 |-----------|--------|----------|
-| Phased rollout read → write | ➕ | Both phases shipped together in v0.3.8 |
+| Phased rollout read → write | ➕ | Both phases shipped together in v0.3.7 |
 | Audit on writes | ✅ | `audit.py` → JSON stderr |
 | `trigger_deploy` confirmation | ✅ | `confirm=true` required |
 | No privilege escalation | ✅ | Uses caller `gcloud`/`gh` credentials |
@@ -179,7 +179,7 @@ All `docs/**/*.md` files are listable via `list_docs()` and readable via `get_do
 | `stable` | Prod engineers | ⚠️ | `GOLDENPATH_CHANNEL=stable` default; content pinned at build/clone |
 | `beta` | Pilot team | ⚠️ | Env var supported; no separate beta content pipeline |
 | `main` | Platform internal only | ⚠️ | Documented; not gated in code |
-| Enforced pinning | MCP serves tag | ⚠️ | Hosted: `mcp/Dockerfile` bakes `GOLDENPATH_VERSION=v0.3.8` |
+| Enforced pinning | MCP serves tag | ⚠️ | Hosted: `mcp/Dockerfile` bakes `GOLDENPATH_VERSION=v0.3.7` |
 
 ### G. Open decisions “resolved” by proposal (§123–131)
 
@@ -331,7 +331,7 @@ For **what is still missing**, see [gap analysis](./golden-path-mcp-evolution-ga
 
 | Version | Date | Notes |
 |---------|------|-------|
-| 1.0 | 2026-06-24 | Initial coverage check vs v0.3.8 |
+| 1.0 | 2026-06-24 | Initial coverage check vs v0.3.7 |
 
 ---
 

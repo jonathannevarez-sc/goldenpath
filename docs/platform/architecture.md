@@ -1,6 +1,6 @@
 # goldenpath — architecture document
 
-> **Generated:** 2026-06-16 | **Version:** v0.3.8 (Phase 1 + Phase 2, enterprise-agnostic)
+> **Generated:** 2026-06-16 | **Version:** v0.3.7 (Phase 1 + Phase 2, enterprise-agnostic)
 >
 > **Render diagrams:** Paste any `mermaid` code block into [Mermaid Live Editor](https://mermaid.live/) or view directly in GitHub / Obsidian.
 

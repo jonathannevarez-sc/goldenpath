@@ -39,7 +39,7 @@ Commands:
   publish   Create GitHub repo, set secrets, WIF trust, push main, watch deploy, verify
   verify    Check Cloud Run URL + health (retries cold start)
   doctor    Diagnose common deploy blockers (branch, secrets, project mismatch)
-  upgrade   Bump deploy.yml + infra pins to enterprise.env version/org (v0.3.8)
+  upgrade   Bump deploy.yml + infra pins to enterprise.env version/org (v0.3.7)
 
 Options (new / publish):
   --template <name>     Template (default: nextjs)

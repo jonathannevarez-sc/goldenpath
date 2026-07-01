@@ -30,7 +30,7 @@ Four terminal backends + Streamlit — identical menu (options 1–15):
 | [`scripts/setup/modules/`](../../scripts/setup/modules/) | Bootstrap, Scaffold, Publish, Verify, OpsCli modules |
 | [`scripts/lib/wizard_defaults.py`](../../scripts/lib/wizard_defaults.py) | Defaults from `config/enterprise.env` |
 
-**Parity:** Bash, Python, Streamlit, `shop`, and PowerShell all converge on `goldenpath_ops` for scaffold, publish, doctor, and platform-pin upgrades (`GOLDENPATH_VERSION` from `enterprise.env`, currently `v0.3.8`).
+**Parity:** Bash, Python, Streamlit, `shop`, and PowerShell all converge on `goldenpath_ops` for scaffold, publish, doctor, and platform-pin upgrades (`GOLDENPATH_VERSION` from `enterprise.env`, currently `v0.3.7`).
 
 **Repo map:** [repository-guide.md](../repository-guide.md)  
 **Do not mix** with CLI config — see [02-pick-your-path.md](./02-pick-your-path.md)

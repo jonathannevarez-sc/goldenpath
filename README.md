@@ -61,7 +61,7 @@ shop publish ../my-service
 Service repos call the reusable workflow (pin from `GOLDENPATH_VERSION` in `enterprise.env`):
 
 ```yaml
-uses: YOUR_ORG/goldenpath/.github/workflows/deploy.yml@v0.3.8
+uses: YOUR_ORG/goldenpath/.github/workflows/deploy.yml@v0.3.7
 ```
 
 ## Repository layout

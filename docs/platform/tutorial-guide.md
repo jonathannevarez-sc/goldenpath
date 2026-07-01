@@ -81,7 +81,7 @@ $EDITOR config/enterprise.env
 | `GCP_SANDBOX_PROJECT` | Isolated test project |
 | `GCP_DEV_PROJECT` / `GCP_PROD_PROJECT` | Production-style two-project setup |
 | `GCP_REGION` | Region for Cloud Run and Artifact Registry |
-| `GOLDENPATH_VERSION` | Git tag for reusable deploy workflows (e.g. `v0.3.8`) |
+| `GOLDENPATH_VERSION` | Git tag for reusable deploy workflows (e.g. `v0.3.7`) |
 | `ARTIFACT_REGISTRY_REPO` | Shared Artifact Registry repository ID |
 | `PROTECTED_PROJECTS` | Comma-separated IDs teardown scripts must never delete |
 
