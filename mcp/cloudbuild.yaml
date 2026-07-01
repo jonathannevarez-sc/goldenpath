@@ -1,0 +1,21 @@
+# Build MCP image and push to Artifact Registry.
+# Invoked by scripts/deploy-mcp-cloudrun.sh (or manually):
+#   gcloud builds submit --config=mcp/cloudbuild.yaml \
+#     --substitutions=_IMAGE=us-central1-docker.pkg.dev/PROJECT/shop-services/goldenpath-mcp:TAG \
+#     .
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - mcp/Dockerfile
+      - -t
+      - ${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

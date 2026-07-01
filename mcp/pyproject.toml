@@ -1,0 +1,19 @@
+[project]
+name = "goldenpath-mcp"
+version = "0.3.0"
+description = "Shop Golden Path MCP server — skills, docs, and platform tools"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp[cli]>=1.6.0",
+]
+
+[project.scripts]
+goldenpath-mcp = "goldenpath_mcp.__main__:run"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["goldenpath_mcp*"]

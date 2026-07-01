@@ -1,0 +1,39 @@
+{
+  "nextjs": {
+    "description": "Next.js 14 full-stack app (App Router, SSR)",
+    "app_runtime": "node",
+    "container_port": 3000,
+    "health_check_path": "/api/health",
+    "default": true
+  },
+  "fastapi": {
+    "description": "Python FastAPI REST API",
+    "app_runtime": "python",
+    "container_port": 8000,
+    "health_check_path": "/api/health"
+  },
+  "streamlit": {
+    "description": "Python Streamlit dashboard / internal tool",
+    "app_runtime": "python",
+    "container_port": 8501,
+    "health_check_path": "/_stcore/health"
+  },
+  "express": {
+    "description": "Node.js Express REST API",
+    "app_runtime": "node",
+    "container_port": 3000,
+    "health_check_path": "/api/health"
+  },
+  "react-spa": {
+    "description": "React SPA (Vite) served by nginx",
+    "app_runtime": "docker",
+    "container_port": 8080,
+    "health_check_path": "/health"
+  },
+  "svelte-spa": {
+    "description": "Svelte SPA (Vite) served by nginx",
+    "app_runtime": "docker",
+    "container_port": 8080,
+    "health_check_path": "/health"
+  }
+}

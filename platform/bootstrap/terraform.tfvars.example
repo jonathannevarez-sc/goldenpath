@@ -1,0 +1,10 @@
+region               = "us-central1"
+dev_project_id       = "shop-dev-REPLACE"
+prod_project_id      = "shop-prod-REPLACE"
+github_org           = "your-github-org"
+github_repo          = "goldenpath"
+artifact_registry_id = "shop-services" # ARTIFACT_REGISTRY_REPO in config/enterprise.env
+
+# WIF attribute_condition allows org/* repos when github_repo is goldenpath.
+# Tighten attribute_condition in wif.tf if you need a strict repo allowlist.
+# After bootstrap, add service repos to github_trusted_service_repos (or run wif-trust-repo.sh).

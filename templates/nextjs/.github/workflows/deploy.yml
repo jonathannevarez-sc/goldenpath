@@ -1,0 +1,59 @@
+# Copy to .github/workflows/deploy.yml in each template.
+# Replace {{SERVICE_NAME}}, {{GITHUB_ORG}}, {{GCP_*}} via shop CLI.
+
+name: Deploy
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prod
+
+jobs:
+  deploy-dev:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
+    uses: {{GITHUB_ORG}}/{{PLATFORM_REPO}}/.github/workflows/deploy.yml@{{GOLDENPATH_VERSION}}
+    with:
+      service_name: {{SERVICE_NAME}}
+      environment: dev
+      gcp_project: {{GCP_DEV_PROJECT}}
+      gcp_region: {{GCP_REGION}}
+      artifact_registry_repo: {{ARTIFACT_REGISTRY_REPO}}
+      goldenpath_org: {{GITHUB_ORG}}
+      goldenpath_version: {{GOLDENPATH_VERSION}}
+      app_runtime: {{APP_RUNTIME}}
+      health_check_path: {{HEALTH_CHECK_PATH}}
+    secrets:
+      GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+      GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+      GOLDENPATH_MODULE_TOKEN: ${{ secrets.GOLDENPATH_MODULE_TOKEN }}
+
+  deploy-prod:
+    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'prod'
+    uses: {{GITHUB_ORG}}/{{PLATFORM_REPO}}/.github/workflows/deploy.yml@{{GOLDENPATH_VERSION}}
+    with:
+      service_name: {{SERVICE_NAME}}
+      environment: prod
+      gcp_project: {{GCP_PROD_PROJECT}}
+      gcp_region: {{GCP_REGION}}
+      artifact_registry_repo: {{ARTIFACT_REGISTRY_REPO}}
+      goldenpath_org: {{GITHUB_ORG}}
+      goldenpath_version: {{GOLDENPATH_VERSION}}
+      app_runtime: {{APP_RUNTIME}}
+      health_check_path: {{HEALTH_CHECK_PATH}}
+    secrets:
+      GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER_PROD }}
+      GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT_PROD }}
+      GOLDENPATH_MODULE_TOKEN: ${{ secrets.GOLDENPATH_MODULE_TOKEN }}

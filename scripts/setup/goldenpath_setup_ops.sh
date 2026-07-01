@@ -1,0 +1,592 @@
+#!/usr/bin/env bash
+# Golden Path — wizard operations (bash).
+# Sourced by scripts/setup/goldenpath_setup.sh — not executed directly.
+# Ports scripts/setup/modules/{Bootstrap,Scaffold,Publish,Verify}.ps1 using
+# existing scripts/lib helpers where possible.
+set -euo pipefail
+
+[[ -n "${WIZARD_OPS_LOADED:-}" ]] && return 0
+WIZARD_OPS_LOADED=1
+
+WIZ_OPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${WIZ_OPS_DIR}/../.." && pwd)"
+CONFIG_PATH="${REPO_ROOT}/.goldenpath-setup.local.json"
+BOOTSTRAP_DIR="${REPO_ROOT}/platform/bootstrap"
+ENTERPRISE_ENV="${GOLDENPATH_CONFIG:-${REPO_ROOT}/config/enterprise.env}"
+WIZARD_DEFAULTS="${REPO_ROOT}/scripts/lib/wizard_defaults.py"
+SCAFFOLD_OUTPUT="$(cd "${REPO_ROOT}/.." && pwd)"
+CATALOG="${REPO_ROOT}/templates/catalog.json"
+WIF_TRUST="${REPO_ROOT}/scripts/lib/wif-trust-repo.sh"
+DEPLOY_RECOVER="${REPO_ROOT}/scripts/lib/deploy-recover-local.sh"
+VERIFY_DEPLOY="${REPO_ROOT}/scripts/lib/verify-deployment.sh"
+TEARDOWN_SCRIPT="${REPO_ROOT}/scripts/env/teardown-personal-test.sh"
+OPS_CLI="${REPO_ROOT}/scripts/setup/goldenpath_ops_cli.py"
+OPS_PYTHONPATH="${REPO_ROOT}/scripts/setup"
+
+# shellcheck source=../../lib/scaffold-tokens.sh
+source "${REPO_ROOT}/scripts/lib/scaffold-tokens.sh"
+
+wizard_die() { printf '  ✗ %s\n' "$*" >&2; exit 1; }
+wizard_log() { printf '  (live output below)\n\n'; }
+wizard_ok() { printf '  ✓ %s\n' "$*"; }
+wizard_warn() { printf '  ! %s\n' "$*"; }
+wizard_err() { printf '  ✗ %s\n' "$*" >&2; }
+
+# Aliases for scripts/lib/scaffold-tokens.sh (sourced below).
+die() { wizard_die "$@"; }
+log() { printf '==> %s\n' "$*"; }
+warn() { wizard_warn "$@"; }
+
+wizard_lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+catalog_get() {
+  python3 - <<PY
+import json
+catalog = json.load(open("${CATALOG}"))
+print(catalog["${1}"]["${2}"])
+PY
+}
+
+wizard_load_config() {
+  eval "$(python3 "${WIZARD_DEFAULTS}" --merge-shell)"
+}
+
+wizard_save_config() {
+  python3 - "${CONFIG_PATH}" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+data = {
+    "profile": os.environ.get("WIZ_PROFILE", "sandbox"),
+    "gcp_project": os.environ.get("WIZ_GCP_PROJECT", ""),
+    "project_display_name": os.environ.get("WIZ_PROJECT_DISPLAY_NAME", ""),
+    "gcp_region": os.environ.get("WIZ_GCP_REGION", ""),
+    "github_org": os.environ.get("WIZ_GITHUB_ORG", ""),
+    "github_platform_repo": os.environ.get("WIZ_GITHUB_PLATFORM_REPO", ""),
+    "goldenpath_version": os.environ.get("WIZ_GOLDENPATH_VERSION", ""),
+    "gcp_dev_project": os.environ.get("WIZ_GCP_DEV_PROJECT", ""),
+    "gcp_prod_project": os.environ.get("WIZ_GCP_PROD_PROJECT", ""),
+    "sandbox_disposable": os.environ.get("WIZ_SANDBOX_DISPOSABLE", "true") == "true",
+    "wif_provider": os.environ.get("WIZ_WIF_PROVIDER", ""),
+    "wif_service_account": os.environ.get("WIZ_WIF_SERVICE_ACCOUNT", ""),
+    "last_service": os.environ.get("WIZ_LAST_SERVICE", ""),
+    "last_service_dir": os.environ.get("WIZ_LAST_SERVICE_DIR", ""),
+}
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+PY
+}
+
+wizard_validate_project_id() {
+  local id
+  id="$(wizard_lower "$1")"
+  [[ ${#id} -ge 6 && ${#id} -le 30 ]] || { wizard_err "Project ID must be 6–30 characters."; return 1; }
+  [[ "$id" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ ]] || {
+    wizard_err "Use lowercase letters, numbers, hyphens; start with a letter and not end with a hyphen."
+    return 1
+  }
+  [[ "$id" != *--* ]] || { wizard_err "Project ID cannot contain consecutive hyphens."; return 1; }
+  # shellcheck disable=SC1091
+  source "${REPO_ROOT}/scripts/lib/load-config.sh"
+  if load_goldenpath_config "${REPO_ROOT}" 2>/dev/null; then
+    if goldenpath_is_protected_project "$id"; then
+      wizard_err "Project '$id' is protected and cannot be used as a sandbox."
+      return 1
+    fi
+  fi
+  return 0
+}
+
+wizard_validate_service_name() {
+  local name="$1"
+  [[ ${#name} -ge 3 && ${#name} -le 40 ]] || { wizard_err "Service name must be 3–40 characters."; return 1; }
+  [[ "$name" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ && "$name" != *--* ]] || {
+    wizard_err "Use lowercase kebab-case; start with a letter, no trailing hyphen (e.g. my-streamlit-app)."
+    return 1
+  }
+  return 0
+}
+
+wizard_cmd_available() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+wizard_service_dir() {
+  local name="${1:-$WIZ_LAST_SERVICE}"
+  [[ -n "$name" ]] || return 1
+  if [[ -n "${WIZ_LAST_SERVICE_DIR:-}" && -d "$WIZ_LAST_SERVICE_DIR" ]]; then
+    printf '%s\n' "$WIZ_LAST_SERVICE_DIR"
+    return 0
+  fi
+  if [[ -d "${SCAFFOLD_OUTPUT}/${name}" ]]; then
+    printf '%s\n' "${SCAFFOLD_OUTPUT}/${name}"
+    return 0
+  fi
+  if [[ -d "${REPO_ROOT}/${name}" ]]; then
+    printf '%s\n' "${REPO_ROOT}/${name}"
+    return 0
+  fi
+  printf '%s\n' "${SCAFFOLD_OUTPUT}/${name}"
+}
+
+wizard_write_bootstrap_tfvars() {
+  local ar_repo="${ARTIFACT_REGISTRY_REPO:-}"
+  [[ -n "$ar_repo" ]] || wizard_die "set ARTIFACT_REGISTRY_REPO in config/enterprise.env"
+  cat > "${BOOTSTRAP_DIR}/terraform.tfvars" <<EOF
+# Generated by Golden Path bash wizard
+personal_test        = true
+test_project_id      = "${WIZ_GCP_PROJECT}"
+region               = "${WIZ_GCP_REGION}"
+github_org           = "${WIZ_GITHUB_ORG}"
+github_repo          = "${WIZ_GITHUB_PLATFORM_REPO}"
+artifact_registry_id = "${ar_repo}"
+EOF
+}
+
+wizard_normalize_display_name() {
+  local name="${1:-Golden Path Sandbox}"
+  if [[ ${#name} -le 30 ]]; then
+    printf '%s' "$name"
+  else
+    printf '%s' "${name:0:30}"
+  fi
+}
+
+wizard_bootstrap() {
+  [[ -f "${ENTERPRISE_ENV}" ]] || wizard_die "Missing ${ENTERPRISE_ENV} — copy config/enterprise.env.example"
+  # shellcheck disable=SC1091
+  source "${REPO_ROOT}/scripts/lib/load-config.sh"
+  load_goldenpath_config "${REPO_ROOT}"
+  : "${PARENT_PROJECT_ID:?}"
+  : "${BILLING_ACCOUNT_ID:?}"
+
+  local project="$WIZ_GCP_PROJECT"
+  local display
+  display="$(wizard_normalize_display_name "${WIZ_PROJECT_DISPLAY_NAME:-${WIZ_GCP_PROJECT:-Golden Path Sandbox}}")"
+  [[ "$project" != "$PARENT_PROJECT_ID" ]] || wizard_die "Project must differ from parent billing project ($PARENT_PROJECT_ID)"
+
+  if ! gcloud projects describe "$project" >/dev/null 2>&1; then
+    gcloud projects create "$project" --name="$display"
+  fi
+
+  local billing
+  billing="$(gcloud billing projects describe "$project" --format='value(billingEnabled)' 2>/dev/null || true)"
+  if [[ "$billing" != "True" ]]; then
+    gcloud billing projects link "$project" \
+      --billing-account="billingAccounts/${BILLING_ACCOUNT_ID}"
+  fi
+
+  wizard_write_bootstrap_tfvars
+  gcloud config set project "$project" >/dev/null
+  gcloud auth application-default set-quota-project "$project" >/dev/null 2>&1 || true
+
+  wizard_log
+  (
+    cd "${BOOTSTRAP_DIR}"
+    terraform init -input=false
+    set +e
+    apply_out="$(terraform apply -auto-approve -input=false 2>&1)"
+    apply_code=$?
+    set -e
+    if [[ "$apply_code" -ne 0 ]]; then
+      printf '%s\n' "$apply_out" >&2
+      if printf '%s' "$apply_out" | grep -qE 'workloadIdentityPools\.create|artifactregistry\.repositories\.create|IAM_PERMISSION_DENIED'; then
+        wizard_warn "GCP APIs may still be propagating — retrying terraform apply in 15s..."
+        sleep 15
+        terraform apply -auto-approve -input=false
+      else
+        exit 1
+      fi
+    fi
+  )
+}
+
+wizard_get_wif_credentials() {
+  local project="$1"
+  local bootstrap="${BOOTSTRAP_DIR}"
+  local provider="" sa=""
+
+  if [[ -f "${bootstrap}/terraform.tfvars" ]]; then
+    if [[ -f "${bootstrap}/terraform.tfstate" || -f "${bootstrap}/.terraform/terraform.tfstate" ]]; then
+      [[ -d "${bootstrap}/.terraform" ]] || (cd "${bootstrap}" && terraform init -input=false >/dev/null)
+      provider="$(cd "${bootstrap}" && terraform output -raw dev_github_wif_provider_name 2>/dev/null || true)"
+      sa="$(cd "${bootstrap}" && terraform output -raw dev_github_actions_sa_email 2>/dev/null || true)"
+      if [[ -n "$provider" && -n "$sa" ]]; then
+        printf '%s\n%s\nterraform\n' "$provider" "$sa"
+        return 0
+      fi
+    fi
+  fi
+
+  sa="$(gcloud iam service-accounts list --project="$project" \
+    --filter='email:github-actions@' --format='value(email)' 2>/dev/null | head -1)"
+  local pool pool_id
+  pool="$(gcloud iam workload-identity-pools list --project="$project" \
+    --location=global --format='value(name)' 2>/dev/null | head -1)"
+  [[ -n "$sa" && -n "$pool" ]] || return 1
+  pool_id="${pool##*/}"
+  provider="$(gcloud iam workload-identity-pools providers list --project="$project" \
+    --location=global --workload-identity-pool="$pool_id" \
+    --format='value(name)' 2>/dev/null | head -1)"
+  [[ -n "$provider" ]] || return 1
+  printf '%s\n%s\ngcloud\n' "$provider" "$sa"
+}
+
+wizard_wif_stale() {
+  if [[ -n "${WIZ_WIF_PROVIDER:-}" ]]; then
+    python3 -c "
+import re, sys
+v=sys.argv[1]
+raise SystemExit(0 if (v and 'Warning:' not in v and re.match(
+    r'^projects/\d+/locations/global/workloadIdentityPools/[^/]+/providers/', v.strip())) else 1)
+" "$WIZ_WIF_PROVIDER" 2>/dev/null || return 0
+  fi
+  if [[ -n "${WIZ_WIF_SERVICE_ACCOUNT:-}" ]]; then
+    python3 -c "
+import re, sys
+v=sys.argv[1]
+raise SystemExit(0 if (v and 'Warning:' not in v and re.match(
+    r'^github-actions@[a-z][a-z0-9-]+\.iam\.gserviceaccount\.com$', v.strip())) else 1)
+" "$WIZ_WIF_SERVICE_ACCOUNT" 2>/dev/null || return 0
+    local expected="github-actions@${WIZ_GCP_DEV_PROJECT}.iam.gserviceaccount.com"
+    [[ "$WIZ_WIF_SERVICE_ACCOUNT" == "$expected" ]] || return 0
+  fi
+  return 1
+}
+
+wizard_export_shop_vars() {
+  export SHOP_GITHUB_ORG="$WIZ_GITHUB_ORG"
+  export SHOP_GOLDENPATH_REPO="$WIZ_GITHUB_PLATFORM_REPO"
+  export SHOP_GOLDENPATH_VERSION="$WIZ_GOLDENPATH_VERSION"
+  export SHOP_GCP_DEV_PROJECT="$WIZ_GCP_DEV_PROJECT"
+  export SHOP_GCP_PROD_PROJECT="$WIZ_GCP_PROD_PROJECT"
+  export SHOP_GCP_REGION="$WIZ_GCP_REGION"
+}
+
+wizard_invoke_ops_cli() {
+  # Shared Python ops — same behavior as goldenpath-setup.ps1 / goldenpath_setup.py
+  wizard_save_config
+  PYTHONPATH="${OPS_PYTHONPATH}" python3 "${OPS_CLI}" "$@"
+}
+
+wizard_show_wif_secrets() {
+  local project="$WIZ_GCP_DEV_PROJECT"
+  printf '  Looking up GitHub deploy credentials for project: %s\n' "$project"
+  local lines provider sa source
+  lines="$(wizard_get_wif_credentials "$project" || true)"
+  [[ -n "$lines" ]] || { wizard_err "Could not find WIF credentials. Run bootstrap first (menu 3)."; return 1; }
+  provider="$(printf '%s\n' "$lines" | sed -n '1p')"
+  sa="$(printf '%s\n' "$lines" | sed -n '2p')"
+  source="$(printf '%s\n' "$lines" | sed -n '3p')"
+  WIZ_WIF_PROVIDER="$provider"
+  WIZ_WIF_SERVICE_ACCOUNT="$sa"
+  wizard_save_config
+  wizard_ok "Found via ${source}"
+  wizard_ok "Settings saved to .goldenpath-setup.local.json"
+  printf '\n'
+  printf '  ┌─────────────────────────────────────────────────────────┐\n'
+  printf '  │  GitHub secrets — add these to your repos               │\n'
+  printf '  └─────────────────────────────────────────────────────────┘\n\n'
+  printf '  Secret name                  Value\n'
+  printf '  ─────────────────────────────────────────────────────────\n'
+  printf '  GCP_WIF_PROVIDER             %s\n' "$provider"
+  printf '  GCP_WIF_SERVICE_ACCOUNT      %s\n' "$sa"
+  printf '\n  Source: %s  |  Project: %s\n\n' "$source" "$WIZ_GCP_PROJECT"
+  printf '  Add to:\n'
+  printf '    • Platform repo:  %s/%s\n' "$WIZ_GITHUB_ORG" "$WIZ_GITHUB_PLATFORM_REPO"
+  printf '    • Each service repo you scaffold\n\n'
+  printf '  Also enable reusable workflows on the platform repo:\n'
+  printf '    GitHub → %s → Settings → Actions → General\n' "$WIZ_GITHUB_PLATFORM_REPO"
+  printf '    → Allow reusable workflows from this repository\n\n'
+  return 0
+}
+
+wizard_ensure_wif() {
+  if wizard_wif_stale; then
+    wizard_warn "WIF credentials are for a different project — clearing and re-looking up"
+    WIZ_WIF_PROVIDER=""
+    WIZ_WIF_SERVICE_ACCOUNT=""
+    wizard_save_config
+  fi
+  if [[ -z "${WIZ_WIF_PROVIDER:-}" || -z "${WIZ_WIF_SERVICE_ACCOUNT:-}" ]]; then
+    wizard_show_wif_secrets || return 1
+  fi
+  return 0
+}
+
+wizard_set_github_secrets() {
+  local repo="$1"
+  wizard_cmd_available gh || { wizard_err "gh CLI required. Install: https://cli.github.com/"; return 1; }
+  wizard_ensure_wif || return 1
+  [[ -n "${WIZ_WIF_PROVIDER:-}" && -n "${WIZ_WIF_SERVICE_ACCOUNT:-}" ]] || return 1
+  local full_repo="$repo"
+  [[ "$repo" == */* ]] || full_repo="${WIZ_GITHUB_ORG}/${repo}"
+  printf '  Setting secrets on %s ...\n' "$full_repo"
+  gh secret set GCP_WIF_PROVIDER --body "$WIZ_WIF_PROVIDER" --repo "$full_repo"
+  gh secret set GCP_WIF_SERVICE_ACCOUNT --body "$WIZ_WIF_SERVICE_ACCOUNT" --repo "$full_repo"
+  wizard_ok "Secrets set on ${full_repo}"
+}
+
+wizard_show_template_list() {
+  [[ -f "${CATALOG}" ]] || { wizard_warn "Could not load template catalog"; return; }
+  CATALOG="${CATALOG}" python3 - <<'PY'
+import json, os
+catalog = json.load(open(os.environ["CATALOG"]))
+print("  Template       Runtime  Port   Health")
+print("  ────────────────────────────────────────")
+for name, meta in catalog.items():
+    default = " (default)" if meta.get("default") else ""
+    print(f"  {name:<14} {meta['app_runtime']:<8} {meta['container_port']:<6} {meta['health_check_path']}{default}")
+print()
+PY
+}
+
+wizard_scaffold() {
+  local service_name="$1" template="$2"
+  wizard_validate_service_name "$service_name" || return 1
+  python3 -c "import json; json.load(open('${CATALOG}'))['${template}']" 2>/dev/null \
+    || { wizard_err "Unknown template '${template}'"; return 1; }
+
+  local target="${SCAFFOLD_OUTPUT}/${service_name}"
+  if [[ -d "$target" ]] && [[ -n "$(ls -A "$target" 2>/dev/null || true)" ]]; then
+    wizard_err "Folder already exists and is not empty: ${target}"
+    return 1
+  fi
+
+  mkdir -p "$target"
+  WIZ_LAST_SERVICE="$service_name"
+  WIZ_LAST_SERVICE_DIR="$target"
+  wizard_save_config
+  wizard_ok "Folder created: ${target}"
+  printf '  (outside platform repo: %s)\n' "$SCAFFOLD_OUTPUT"
+  printf '  (open in Finder/VS Code now — template files copy next)\n\n'
+
+  printf '  Scaffolding %s into %s ...\n' "$template" "$service_name"
+  local cli_out health_path resolved_target
+  if ! cli_out="$(wizard_invoke_ops_cli scaffold "$service_name" "$template" --output "$SCAFFOLD_OUTPUT" 2>&1)"; then
+    wizard_err "Scaffold failed"
+    printf '%s\n' "$cli_out" >&2
+    return 1
+  fi
+  resolved_target="$(printf '%s\n' "$cli_out" | sed -n 's/^SERVICE_DIR=//p' | tail -1)"
+  health_path="$(printf '%s\n' "$cli_out" | sed -n 's/^HEALTH_PATH=//p' | tail -1)"
+  [[ -n "$resolved_target" ]] || resolved_target="$target"
+
+  WIZ_LAST_SERVICE="$service_name"
+  WIZ_LAST_SERVICE_DIR="$resolved_target"
+  wizard_save_config
+  wizard_ok "Scaffolded: ${resolved_target} (branch: main)"
+  printf '  project_id = %s in infra/*.tfvars\n' "$WIZ_GCP_DEV_PROJECT"
+  printf '  health path  = %s\n\n' "${health_path:-/health}"
+  printf '%s\n' "$resolved_target"
+}
+
+wizard_platform_visibility() {
+  local full="${WIZ_GITHUB_ORG}/${WIZ_GITHUB_PLATFORM_REPO}"
+  local vis
+  vis="$(gh repo view "$full" --json visibility -q .visibility 2>/dev/null || true)"
+  [[ -n "$vis" ]] || { printf 'PUBLIC\n'; return; }
+  printf '%s\n' "$(printf '%s' "$vis" | tr '[:lower:]' '[:upper:]')"
+}
+
+wizard_publish() {
+  local service_dir="$1"
+  service_dir="$(cd "$service_dir" && pwd)"
+  local name full deploy_ok="unknown"
+  name="$(basename "$service_dir")"
+  full="${WIZ_GITHUB_ORG}/${name}"
+  local cloud_run_svc="${name}-dev"
+
+  wizard_ensure_wif || return 1
+  wizard_cmd_available gh || wizard_die "gh required — https://cli.github.com/"
+  [[ -d "${service_dir}/.git" ]] || wizard_die "Not a git repo: ${service_dir}"
+
+  wizard_log
+  local cli_out publish_code=0
+  set +e
+  cli_out="$(wizard_invoke_ops_cli publish "$service_dir" \
+    --wif-provider "$WIZ_WIF_PROVIDER" \
+    --wif-service-account "$WIZ_WIF_SERVICE_ACCOUNT" 2>&1)"
+  publish_code=$?
+  set -e
+  printf '%s\n' "$cli_out"
+
+  full="$(printf '%s\n' "$cli_out" | sed -n 's/^REPO=//p' | tail -1)"
+  [[ -n "$full" ]] || full="${WIZ_GITHUB_ORG}/${name}"
+  deploy_ok="$(printf '%s\n' "$cli_out" | sed -n 's/^DEPLOY_OK=//p' | tail -1)"
+  [[ -n "$deploy_ok" ]] || deploy_ok="unknown"
+
+  wizard_ok "Published: ${full}"
+  printf '  https://github.com/%s\n' "$full"
+
+  WIZ_LAST_SERVICE="$name"
+  WIZ_LAST_SERVICE_DIR="$service_dir"
+  wizard_save_config
+
+  if [[ "$deploy_ok" == "false" ]]; then
+    wizard_err "GitHub deploy workflow failed — repo was created but Cloud Run is not live yet."
+    printf '  Actions: https://github.com/%s/actions\n' "$full"
+    printf '  Retry:   menu 7 (Publish) — WIF trust + deploy rerun are automatic.\n'
+    printf '  Doctor:  menu 9 to list blockers\n'
+    printf 'DEPLOY_OK=false\nREPO=%s\nSERVICE_DIR=%s\n' "$full" "$service_dir"
+    return 1
+  fi
+
+  if [[ "$publish_code" -ne 0 && "$deploy_ok" != "false" ]]; then
+    wizard_err "Publish failed — see output above"
+    printf 'DEPLOY_OK=false\nREPO=%s\nSERVICE_DIR=%s\n' "$full" "$service_dir"
+    return 1
+  fi
+
+  if [[ "$deploy_ok" == "true" ]]; then
+    wizard_ok "Deploy workflow succeeded"
+  else
+    wizard_warn "Deploy watch skipped — checking Cloud Run directly"
+  fi
+  printf '\n  Verifying Cloud Run + health (may take ~1 min on cold start)...\n'
+  local verify_out
+  verify_out="$(wizard_invoke_ops_cli verify "$cloud_run_svc" "$service_dir" \
+    --project "$WIZ_GCP_DEV_PROJECT" --region "$WIZ_GCP_REGION" 2>&1 || true)"
+  VERIFY_URL="$(printf '%s\n' "$verify_out" | sed -n 's/^URL=//p' | tail -1)"
+  VERIFY_HEALTH_OK="$(printf '%s\n' "$verify_out" | sed -n 's/^HEALTH_OK=//p' | tail -1)"
+  VERIFY_HEALTH_PATH="$(printf '%s\n' "$verify_out" | sed -n 's/^HEALTH_PATH=//p' | tail -1)"
+  VERIFY_STATUS_CODE="$(printf '%s\n' "$verify_out" | sed -n 's/^STATUS_CODE=//p' | tail -1)"
+
+  wizard_show_deployment_summary "$full" "$cloud_run_svc"
+  if [[ "${VERIFY_HEALTH_OK:-false}" == "True" || "${VERIFY_HEALTH_OK:-false}" == "true" ]]; then
+    wizard_ok "Service is live and healthy"
+  elif [[ -n "${VERIFY_URL:-}" ]]; then
+    wizard_warn "Service URL exists but health check not ready — wait 30s and run menu 8"
+  else
+    wizard_warn "Cloud Run service not visible yet — check Actions or run menu 8 shortly"
+  fi
+  printf 'DEPLOY_OK=%s\nREPO=%s\nSERVICE_DIR=%s\n' "$deploy_ok" "$full" "$service_dir"
+}
+
+read_tfvars_project() {
+  local dir="$1"
+  local f="${dir}/infra/dev.tfvars"
+  [[ -f "$f" ]] || return 1
+  grep -E 'project_id\s*=' "$f" | head -1 | sed 's/.*"\([^"]*\)".*/\1/'
+}
+
+wizard_show_deployment_summary() {
+  local repo="$1" cloud_run_svc="$2"
+  printf '\n  ┌─ Deployment summary ──────────────────────────────────────┐\n'
+  if [[ -n "$repo" ]]; then
+    printf '  │  GitHub repo     https://github.com/%s\n' "$repo"
+    printf '  │  Actions         https://github.com/%s/actions\n' "$repo"
+  fi
+  printf '  │  Cloud Run       %s\n' "$cloud_run_svc"
+  if [[ -n "${VERIFY_URL:-}" ]]; then
+    printf '  │  Live URL        %s\n' "$VERIFY_URL"
+    if [[ "${VERIFY_HEALTH_OK:-false}" == "true" ]]; then
+      printf '  │  Health          %s → HTTP %s\n' "$VERIFY_HEALTH_PATH" "$VERIFY_STATUS_CODE"
+    else
+      printf '  │  Health          not responding yet — try menu 8 in a minute\n'
+    fi
+  else
+    printf '  │  Live URL        (not found yet)\n'
+  fi
+  printf '  └───────────────────────────────────────────────────────────┘\n\n'
+  if [[ -n "${VERIFY_URL:-}" && "${VERIFY_HEALTH_OK:-false}" == "true" ]]; then
+    printf '  Open your app:\n    %s\n\n' "$VERIFY_URL"
+  fi
+}
+
+wizard_verify() {
+  local cloud_run_svc="$1"
+  local service_dir="${2:-}"
+  [[ -x "$VERIFY_DEPLOY" ]] || chmod +x "$VERIFY_DEPLOY"
+  VERIFY_DIR="$service_dir"
+  # shellcheck disable=SC1090
+  if ! eval "$(VERIFY_MAX_ATTEMPTS=8 VERIFY_RETRY_DELAY=8 "$VERIFY_DEPLOY" \
+    "$cloud_run_svc" "$WIZ_GCP_PROJECT" "$WIZ_GCP_REGION" "$service_dir" "$REPO_ROOT")"; then
+    wizard_err "${VERIFY_ERROR:-No health endpoint responded.}"
+    return 1
+  fi
+  local repo=""
+  if [[ -n "${WIZ_LAST_SERVICE:-}" && -n "${WIZ_GITHUB_ORG:-}" ]]; then
+    repo="${WIZ_GITHUB_ORG}/${WIZ_LAST_SERVICE}"
+  fi
+  wizard_show_deployment_summary "$repo" "$cloud_run_svc"
+  [[ "${VERIFY_HEALTH_OK:-false}" == "true" ]]
+}
+
+wizard_doctor() {
+  local service_dir="$1"
+  service_dir="$(cd "$service_dir" && pwd)"
+  local cli_out issues=0
+
+  printf '\n'
+  cli_out="$(wizard_invoke_ops_cli doctor "$service_dir" 2>&1 || true)"
+  if [[ -z "$cli_out" ]]; then
+    wizard_err "Doctor failed — could not run diagnostics"
+    return 1
+  fi
+
+  if printf '%s\n' "$cli_out" | grep -q '^ISSUE='; then
+    printf '  Issues:\n'
+    while IFS= read -r line; do
+      [[ "$line" == ISSUE=* ]] || continue
+      printf '    • %s\n' "${line#ISSUE=}"
+      issues=$((issues + 1))
+    done <<< "$cli_out"
+    printf '  Fix with menu option 7 (Publish service)\n'
+  else
+    wizard_ok "No issues found"
+  fi
+  printf '\n'
+  [[ "$issues" -eq 0 ]]
+}
+
+wizard_teardown() {
+  local delete_project="${1:-false}"
+  [[ -x "${TEARDOWN_SCRIPT}" ]] || chmod +x "${TEARDOWN_SCRIPT}"
+  local args=()
+  [[ "$delete_project" == "true" ]] && args+=(--delete-project "$WIZ_GCP_PROJECT")
+  args+=(--yes)
+  "${TEARDOWN_SCRIPT}" "${args[@]}"
+}
+
+wizard_generate_mcp_config() {
+  local mcp_dir="${REPO_ROOT}/mcp"
+  local venv_python="${mcp_dir}/.venv/bin/python"
+  [[ -x "$venv_python" ]] || {
+    wizard_warn "MCP venv not found at ${venv_python}"
+    return 1
+  }
+  local out="${mcp_dir}/claude-mcp.generated.json"
+  local version="${WIZ_GOLDENPATH_VERSION:-}"
+  [[ -n "$version" ]] || version="$(python3 "${WIZARD_DEFAULTS}" --platform-default GOLDENPATH_VERSION)"
+  python3 - "$out" "$venv_python" "$REPO_ROOT" "$WIZ_GCP_PROJECT" "$WIZ_GCP_REGION" "$version" <<'PY'
+import json, sys
+out, vpy, root, project, region, version = sys.argv[1:7]
+cfg = {
+    "mcpServers": {
+        "goldenpath-local": {
+            "command": vpy,
+            "args": ["-m", "goldenpath_mcp"],
+            "env": {
+                "GOLDENPATH_ROOT": root,
+                "GOLDENPATH_CHANNEL": "stable",
+                "GOLDENPATH_VERSION": version,
+                "GCP_PROJECT": project,
+                "GCP_REGION": region,
+            },
+        }
+    }
+}
+with open(out, "w") as f:
+    json.dump(cfg, f, indent=2)
+PY
+  wizard_ok "Wrote ${out}"
+  printf '\n  Paste the contents into Claude Desktop → Settings → Developer → MCP\n'
+  printf "  Or merge 'goldenpath-local' into your existing MCP config.\n\n"
+  cat "$out"
+  printf '\n'
+}
+
+wizard_reset_config() {
+  eval "$(python3 "${WIZARD_DEFAULTS}" --shell-exports)"
+  wizard_save_config
+}

@@ -1,0 +1,98 @@
+# Build MCP image → Artifact Registry → Cloud Run (streamable-http + API key).
+# Configure repository variables (Settings → Secrets and variables → Actions → Variables):
+#   GCP_SANDBOX_PROJECT, GCP_REGION, MCP_SERVICE_NAME, ARTIFACT_REGISTRY_REPO
+name: Deploy MCP
+
+on:
+  workflow_dispatch:
+    inputs:
+      gcp_project:
+        description: GCP project (overrides vars.GCP_SANDBOX_PROJECT)
+        required: false
+        type: string
+
+  push:
+    branches: [main]
+    paths:
+      - "mcp/**"
+      - "cli/shop"
+      - "skills/**"
+      - "docs/**"
+      - "templates/catalog.json"
+      - ".github/workflows/deploy-mcp.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT: ${{ inputs.gcp_project || vars.GCP_SANDBOX_PROJECT }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      SERVICE_NAME: ${{ vars.MCP_SERVICE_NAME }}
+      AR_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate repository variables
+        run: |
+          missing=0
+          for pair in "GCP_PROJECT:GCP_SANDBOX_PROJECT" "GCP_REGION:GCP_REGION" \
+                      "SERVICE_NAME:MCP_SERVICE_NAME" "AR_REPO:ARTIFACT_REGISTRY_REPO"; do
+            var="${pair%%:*}"
+            name="${pair##*:}"
+            if [ -z "${!var}" ]; then
+              echo "::error::Set repository variable ${name} (see config/enterprise.env.example)"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        env:
+          IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+        run: |
+          docker build -f mcp/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform apply (MCP Cloud Run)
+        working-directory: mcp/infra
+        env:
+          TF_VAR_image_tag: ${{ github.sha }}
+          TF_VAR_project_id: ${{ env.GCP_PROJECT }}
+          TF_VAR_region: ${{ env.GCP_REGION }}
+          TF_VAR_service_name: ${{ env.SERVICE_NAME }}
+          TF_VAR_artifact_registry_repo: ${{ env.AR_REPO }}
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve \
+            -var="image_tag=${{ github.sha }}" \
+            -var="project_id=${{ env.GCP_PROJECT }}" \
+            -var="region=${{ env.GCP_REGION }}" \
+            -var="service_name=${{ env.SERVICE_NAME }}" \
+            -var="artifact_registry_repo=${{ env.AR_REPO }}"
+
+      - name: Summary
+        working-directory: mcp/infra
+        run: |
+          echo "## MCP deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **URL:** $(terraform output -raw url)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **MCP:** $(terraform output -raw mcp_url)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Health:** $(terraform output -raw health_url)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "API key: \`terraform output -raw mcp_api_key\` (sensitive — run locally or in GCP console)" >> "$GITHUB_STEP_SUMMARY"

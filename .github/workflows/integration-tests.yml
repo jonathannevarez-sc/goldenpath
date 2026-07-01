@@ -1,0 +1,46 @@
+# Tier 2 enterprise integration — required for customer-facing releases.
+# Configure repository secrets before enabling on release branches.
+name: Integration tests (Tier 2)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  sandbox-deploy-spine:
+    runs-on: ubuntu-latest
+    environment: goldenpath-sandbox
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_SANDBOX_PROJECT }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+
+      - name: Install GitHub CLI
+        run: sudo apt-get update && sudo apt-get install -y gh
+
+      - name: Tier 2 integration (publish + verify)
+        env:
+          INTEGRATION_TEST_ENABLED: "1"
+          SHOP_GITHUB_ORG: ${{ secrets.GITHUB_ORG }}
+          SHOP_GCP_DEV_PROJECT: ${{ secrets.GCP_SANDBOX_PROJECT }}
+          SHOP_GCP_PROD_PROJECT: ${{ secrets.GCP_SANDBOX_PROJECT }}
+          GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHOP_GOLDENPATH_REPO: ${{ github.repository }}
+          SHOP_GOLDENPATH_VERSION: ${{ github.ref_name }}
+        run: bash tests/run-integration-tests.sh

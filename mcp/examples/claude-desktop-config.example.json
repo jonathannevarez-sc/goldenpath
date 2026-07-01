@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "goldenpath-local": {
+      "command": "/absolute/path/to/goldenpath/mcp/.venv/bin/python",
+      "args": ["-m", "goldenpath_mcp"],
+      "env": {
+        "GOLDENPATH_ROOT": "/absolute/path/to/goldenpath",
+        "GOLDENPATH_CHANNEL": "stable",
+        "GOLDENPATH_VERSION": "SET_FROM_ENTERPRISE_ENV",
+        "GCP_PROJECT": "SET_FROM_ENTERPRISE_ENV",
+        "GCP_REGION": "SET_FROM_ENTERPRISE_ENV"
+      }
+    }
+  }
+}

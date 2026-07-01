@@ -1,0 +1,45 @@
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/terraform.tfvars
+!**/terraform.tfvars.example
+**/crash.log
+**/.terraform.tfstate.lock.info
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*.local
+.goldenpath-setup.local.json
+coverage.xml
+.goldenpath-cli.local.json
+config/enterprise.env
+config/enterprise.env.team
+**/claude-mcp.generated.json
+**/.clearance-rendered-preview-*/
+
+# Personal / local tooling (never commit)
+.varana/
+
+# OS / IDE
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Python
+__pycache__/
+.venv/
+mcp/.venv/
+.pytest_cache/
+*.egg-info/

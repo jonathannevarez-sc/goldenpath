@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "goldenpath-remote": {
+      "url": "https://YOUR-MCP-SERVICE-REPLACE.run.app/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_MCP_API_KEY"
+      }
+    }
+  }
+}

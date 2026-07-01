@@ -1,0 +1,49 @@
+name: Platform tests
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  bash-and-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git for scaffold tests
+        run: |
+          git config --global user.email "ci@goldenpath.local"
+          git config --global user.name "Golden Path CI"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bash tests
+        run: bash tests/bash/run-bash-tests.sh
+
+      - name: Python tests
+        run: |
+          python3 -m venv tests/.venv
+          tests/.venv/bin/pip install -q -r tests/requirements-test.txt
+          tests/.venv/bin/pip install -q -e mcp
+          tests/.venv/bin/python -m pytest tests -q --tb=short
+
+  pester:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PowerShell
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https software-properties-common
+          wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo apt-get install -y powershell
+
+      - name: Pester tests
+        shell: pwsh
+        run: ./tests/Run-SetupWizardTests.ps1 -NoCoverage

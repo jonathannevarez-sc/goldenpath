@@ -1,0 +1,14 @@
+{
+  "name": "{{SERVICE_NAME}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "lint": "node --check src/index.js",
+    "test": "node --test tests/health.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

@@ -1,0 +1,419 @@
+#!/usr/bin/env bash
+# Golden Path CLI — bash only. Does NOT use the PowerShell wizard.
+# Config: .goldenpath-cli.local.json (or SHOP_* env vars).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+TEMPLATES_DIR="${REPO_ROOT}/templates"
+CATALOG="${TEMPLATES_DIR}/catalog.json"
+CLI_CONFIG="${REPO_ROOT}/.goldenpath-cli.local.json"
+WIF_TRUST="${REPO_ROOT}/scripts/lib/wif-trust-repo.sh"
+GH_AUTH_CHECK="${REPO_ROOT}/scripts/lib/gh-auth-check.sh"
+DEPLOY_RECOVER="${REPO_ROOT}/scripts/lib/deploy-recover-local.sh"
+VERIFY_DEPLOY="${REPO_ROOT}/scripts/lib/verify-deployment.sh"
+OPS_CLI="${REPO_ROOT}/scripts/setup/goldenpath_ops_cli.py"
+OPS_PYTHONPATH="${REPO_ROOT}/scripts/setup"
+# shellcheck source=../scripts/lib/scaffold-tokens.sh
+source "${REPO_ROOT}/scripts/lib/scaffold-tokens.sh"
+# shellcheck source=../scripts/lib/wif-credentials.sh
+source "${REPO_ROOT}/scripts/lib/wif-credentials.sh"
+
+usage() {
+  cat <<'EOF'
+Golden Path CLI (bash) — separate from the PowerShell wizard.
+
+Usage:
+  shop list
+  shop config show|init|set [options]
+  shop new <service-name> [options]
+  shop publish [service-dir] [options]
+  shop verify [service-dir] [options]
+  shop doctor [service-dir]
+  shop upgrade [service-dir]
+
+Commands:
+  list      List templates
+  config    Show or save CLI settings (.goldenpath-cli.local.json)
+  new       Scaffold a service (git init -b main)
+  publish   Create GitHub repo, set secrets, WIF trust, push main, watch deploy, verify
+  verify    Check Cloud Run URL + health (retries cold start)
+  doctor    Diagnose common deploy blockers (branch, secrets, project mismatch)
+  upgrade   Bump deploy.yml + infra pins to enterprise.env version/org (v0.3.7)
+
+Options (new / publish):
+  --template <name>     Template (default: nextjs)
+  --output <dir>        Parent directory for scaffold (default: .)
+  --github-org <org>
+  --gcp-dev <project>
+  --gcp-prod <project>
+  --region <region>
+  --dry-run
+  --no-watch            Skip gh run watch after publish
+
+Environment (overrides config file):
+  SHOP_GITHUB_ORG, SHOP_GOLDENPATH_REPO, SHOP_GOLDENPATH_VERSION
+  SHOP_GCP_DEV_PROJECT, SHOP_GCP_PROD_PROJECT, SHOP_GCP_REGION
+
+PowerShell wizard users: use ./scripts/goldenpath-setup.sh instead — do not mix paths.
+EOF
+}
+
+log() { printf '==> %s\n' "$*"; }
+die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+warn() { printf 'warning: %s\n' "$*" >&2; }
+
+load_cli_config() {
+  [[ -f "$CLI_CONFIG" ]] || return 0
+  while IFS='=' read -r key val; do
+    [[ -z "$key" || -z "$val" ]] && continue
+    if [[ -z "${!key:-}" ]]; then
+      export "${key}=${val}"
+    fi
+  done < <(python3 - "$CLI_CONFIG" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1]))
+mapping = {
+    "SHOP_GITHUB_ORG": "github_org",
+    "SHOP_GOLDENPATH_REPO": "github_platform_repo",
+    "SHOP_GOLDENPATH_VERSION": "goldenpath_version",
+    "SHOP_GCP_DEV_PROJECT": "gcp_dev_project",
+    "SHOP_GCP_PROD_PROJECT": "gcp_prod_project",
+    "SHOP_GCP_REGION": "gcp_region",
+    "SHOP_LAST_SERVICE": "last_service",
+}
+for env, field in mapping.items():
+    v = c.get(field) or ""
+    if v:
+        print(f"{env}={v}")
+PY
+)
+}
+
+save_cli_config() {
+  python3 - "$CLI_CONFIG" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+data = {
+    "github_org": os.environ.get("SHOP_GITHUB_ORG", ""),
+    "github_platform_repo": os.environ.get("SHOP_GOLDENPATH_REPO", ""),
+    "goldenpath_version": os.environ.get("SHOP_GOLDENPATH_VERSION", ""),
+    "gcp_dev_project": os.environ.get("SHOP_GCP_DEV_PROJECT", ""),
+    "gcp_prod_project": os.environ.get("SHOP_GCP_PROD_PROJECT", ""),
+    "gcp_region": os.environ.get("SHOP_GCP_REGION", ""),
+    "artifact_registry_repo": os.environ.get("SHOP_ARTIFACT_REGISTRY_REPO", ""),
+    "last_service": os.environ.get("SHOP_LAST_SERVICE", ""),
+}
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+print(f"saved {path}")
+PY
+}
+
+_gp_platform_default() {
+  python3 "${REPO_ROOT}/scripts/lib/wizard_defaults.py" --platform-default "$1" 2>/dev/null || true
+}
+
+resolve_config() {
+  load_cli_config
+  if [[ -f "${REPO_ROOT}/config/enterprise.env" ]]; then
+    # shellcheck disable=SC1091
+    source "${REPO_ROOT}/scripts/lib/load-config.sh"
+    load_goldenpath_config "${REPO_ROOT}" 2>/dev/null || true
+  fi
+  # enterprise.env owns team pins — CLI/json cannot pin stale versions or orgs
+  SHOP_GITHUB_ORG="${GITHUB_ORG:-${SHOP_GITHUB_ORG:-}}"
+  SHOP_GOLDENPATH_REPO="${PLATFORM_REPO:-${SHOP_GOLDENPATH_REPO:-$(_gp_platform_default PLATFORM_REPO)}}"
+  SHOP_GOLDENPATH_VERSION="${GOLDENPATH_VERSION:-$(_gp_platform_default GOLDENPATH_VERSION)}"
+  SHOP_GCP_DEV_PROJECT="${GCP_DEV_PROJECT:-${GCP_SANDBOX_PROJECT:-${SHOP_GCP_DEV_PROJECT:-}}}"
+  SHOP_GCP_PROD_PROJECT="${GCP_PROD_PROJECT:-${SHOP_GCP_PROD_PROJECT:-$SHOP_GCP_DEV_PROJECT}}"
+  SHOP_GCP_REGION="${GCP_REGION:-${SHOP_GCP_REGION:-$(_gp_platform_default GCP_REGION)}}"
+  SHOP_ARTIFACT_REGISTRY_REPO="${SHOP_ARTIFACT_REGISTRY_REPO:-${ARTIFACT_REGISTRY_REPO:-$(_gp_platform_default ARTIFACT_REGISTRY_REPO)}}"
+  SHOP_LAST_SERVICE="${SHOP_LAST_SERVICE:-}"
+}
+
+require_config() {
+  resolve_config
+  [[ -n "$SHOP_GITHUB_ORG" ]] || die "set --github-org, SHOP_GITHUB_ORG, or run: shop config init"
+  [[ -n "$SHOP_GCP_DEV_PROJECT" ]] || die "set --gcp-dev, SHOP_GCP_DEV_PROJECT, or run: shop config init"
+  [[ -n "$SHOP_GCP_PROD_PROJECT" ]] || die "set --gcp-prod or SHOP_GCP_PROD_PROJECT"
+}
+
+catalog_get() {
+  python3 - <<PY
+import json
+catalog = json.load(open("${CATALOG}"))
+print(catalog["${1}"]["${2}"])
+PY
+}
+
+shop_write_ops_config() {
+  python3 - "$1" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+data = {
+    "github_org": os.environ.get("SHOP_GITHUB_ORG", ""),
+    "github_platform_repo": os.environ.get("SHOP_GOLDENPATH_REPO", ""),
+    "goldenpath_version": os.environ.get("SHOP_GOLDENPATH_VERSION", ""),
+    "gcp_dev_project": os.environ.get("SHOP_GCP_DEV_PROJECT", ""),
+    "gcp_prod_project": os.environ.get("SHOP_GCP_PROD_PROJECT", ""),
+    "gcp_region": os.environ.get("SHOP_GCP_REGION", ""),
+    "last_service": os.environ.get("SHOP_LAST_SERVICE", ""),
+}
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+PY
+}
+
+shop_invoke_ops() {
+  local cfg_file code
+  cfg_file="$(mktemp "${TMPDIR:-/tmp}/goldenpath-shop-ops.XXXXXX")"
+  shop_write_ops_config "$cfg_file"
+  PYTHONPATH="${OPS_PYTHONPATH}" python3 "${OPS_CLI}" --config "$cfg_file" "$@"
+  code=$?
+  rm -f "$cfg_file"
+  return "$code"
+}
+
+cmd_list() {
+  [[ -f "${CATALOG}" ]] || die "missing ${CATALOG}"
+  CATALOG="${CATALOG}" python3 - <<'PY'
+import json, os
+catalog = json.load(open(os.environ["CATALOG"]))
+print(f"{'Template':<14} {'Runtime':<8} {'Port':<6} Health")
+print("-" * 50)
+for name, meta in catalog.items():
+    default = " (default)" if meta.get("default") else ""
+    print(f"{name:<14} {meta['app_runtime']:<8} {meta['container_port']:<6} {meta['health_check_path']}{default}")
+PY
+}
+
+cmd_config() {
+  local sub="${1:-show}"
+  shift || true
+  case "$sub" in
+    show)
+      if [[ -f "$CLI_CONFIG" ]]; then
+        cat "$CLI_CONFIG"
+      else
+        warn "no $CLI_CONFIG — run: shop config init"
+      fi
+      ;;
+    init|set)
+      resolve_config
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --github-org) SHOP_GITHUB_ORG="$2"; shift 2 ;;
+          --gcp-dev) SHOP_GCP_DEV_PROJECT="$2"; shift 2 ;;
+          --gcp-prod) SHOP_GCP_PROD_PROJECT="$2"; shift 2 ;;
+          --region) SHOP_GCP_REGION="$2"; shift 2 ;;
+          --goldenpath-repo) SHOP_GOLDENPATH_REPO="$2"; shift 2 ;;
+          --goldenpath-version) SHOP_GOLDENPATH_VERSION="$2"; shift 2 ;;
+          *) die "unknown: $1" ;;
+        esac
+      done
+      if [[ "$sub" == "init" ]]; then
+        SHOP_GITHUB_ORG="${SHOP_GITHUB_ORG:-$(gh api user -q .login 2>/dev/null || true)}"
+        resolve_config
+      fi
+      [[ -n "$SHOP_GCP_DEV_PROJECT" ]] && validate_gcp_project_id "$SHOP_GCP_DEV_PROJECT"
+      [[ -n "$SHOP_GCP_PROD_PROJECT" ]] && validate_gcp_project_id "$SHOP_GCP_PROD_PROJECT"
+      require_config
+      export SHOP_GITHUB_ORG SHOP_GOLDENPATH_REPO SHOP_GOLDENPATH_VERSION \
+        SHOP_GCP_DEV_PROJECT SHOP_GCP_PROD_PROJECT SHOP_GCP_REGION SHOP_ARTIFACT_REGISTRY_REPO
+      save_cli_config
+      ;;
+    *)
+      die "usage: shop config show|init|set"
+      ;;
+  esac
+}
+
+cmd_new() {
+  require_config
+  local service_name="" template="nextjs" output_dir="." dry_run="false"
+  [[ $# -ge 1 ]] || { usage; exit 1; }
+  service_name="$1"; shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --template) template="$2"; shift 2 ;;
+      --output) output_dir="$2"; shift 2 ;;
+      --github-org) SHOP_GITHUB_ORG="$2"; shift 2 ;;
+      --gcp-dev) SHOP_GCP_DEV_PROJECT="$2"; shift 2 ;;
+      --gcp-prod) SHOP_GCP_PROD_PROJECT="$2"; shift 2 ;;
+      --region) SHOP_GCP_REGION="$2"; shift 2 ;;
+      --dry-run) dry_run="true"; shift ;;
+      *) die "unknown: $1" ;;
+    esac
+  done
+  require_config
+
+  [[ ${#service_name} -ge 3 && ${#service_name} -le 40 ]] || die "service name must be 3–40 characters"
+  [[ "$service_name" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ && "$service_name" != *--* ]] || die "invalid service name (lowercase kebab-case, no trailing hyphen)"
+  python3 -c "import json; json.load(open('${CATALOG}'))['${template}']" 2>/dev/null || die "unknown template: ${template}"
+
+  local target_dir cli_out
+  target_dir="$(cd "$output_dir" && pwd)/${service_name}"
+  [[ "$dry_run" == "true" ]] && { log "would create $target_dir"; exit 0; }
+  [[ ! -e "$target_dir" ]] || die "exists: $target_dir"
+
+  log "scaffolding $target_dir ($template)"
+  if ! cli_out="$(shop_invoke_ops scaffold "$service_name" "$template" --output "$(cd "$output_dir" && pwd)" 2>&1)"; then
+    printf '%s\n' "$cli_out" >&2
+    die "scaffold failed"
+  fi
+  target_dir="$(printf '%s\n' "$cli_out" | sed -n 's/^SERVICE_DIR=//p' | tail -1)"
+  [[ -n "$target_dir" ]] || target_dir="$(cd "$output_dir" && pwd)/${service_name}"
+
+  cat <<EOF
+
+Scaffolded: ${target_dir}
+Branch: main (deploy workflow triggers on push to main)
+
+Next (one command):
+  shop publish ${target_dir}
+
+Or step by step:
+  cd ${target_dir}
+  shop publish
+
+EOF
+}
+
+read_tfvars_project() {
+  local f="$1/infra/dev.tfvars"
+  [[ -f "$f" ]] || return 1
+  grep -E 'project_id\s*=' "$f" | head -1 | sed 's/.*"\([^"]*\)".*/\1/'
+}
+
+cmd_doctor() {
+  local dir="${1:-.}"
+  dir="$(cd "$dir" && pwd)"
+  require_config
+  local cli_out issues=0
+
+  printf '\nDoctor: %s\n' "$dir"
+  printf '────────────────────────────────────────\n'
+
+  cli_out="$(shop_invoke_ops doctor "$dir" 2>&1 || true)"
+  if printf '%s\n' "$cli_out" | grep -q '^ISSUE='; then
+    while IFS= read -r line; do
+      [[ "$line" == ISSUE=* ]] || continue
+      warn "${line#ISSUE=}"
+      issues=$((issues + 1))
+    done <<< "$cli_out"
+  else
+    log "no issues found"
+  fi
+
+  if [[ "$issues" -gt 0 ]]; then
+    printf '\nFix most issues with: shop publish %s\n' "$dir"
+    exit 1
+  fi
+}
+
+cmd_upgrade() {
+  require_config
+  local dir="."
+  [[ $# -ge 1 && "${1:0:2}" != "--" ]] && dir="$1"
+  dir="$(cd "$dir" && pwd)"
+  log "upgrading platform pins in $dir to ${SHOP_GOLDENPATH_VERSION} (${SHOP_GITHUB_ORG})"
+  shop_invoke_ops upgrade "$dir"
+}
+
+cmd_publish() {
+  require_config
+  local dir="." watch="true"
+  if [[ $# -ge 1 && "${1:0:2}" != "--" ]]; then dir="$1"; shift; fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --github-org) SHOP_GITHUB_ORG="$2"; shift 2 ;;
+      --gcp-dev) SHOP_GCP_DEV_PROJECT="$2"; shift 2 ;;
+      --no-watch) watch="false"; shift ;;
+      *) die "unknown: $1" ;;
+    esac
+  done
+  require_config
+
+  dir="$(cd "$dir" && pwd)"
+  local name full
+  name="$(basename "$dir")"
+  full="${SHOP_GITHUB_ORG}/${name}"
+
+  command -v gh >/dev/null 2>&1 || die "gh required — https://cli.github.com/"
+  [[ -d "$dir/.git" ]] || die "not a git repo: $dir (run shop new first)"
+
+  local tfproj
+  tfproj="$(read_tfvars_project "$dir" || true)"
+  if [[ -n "$tfproj" && "$tfproj" != "$SHOP_GCP_DEV_PROJECT" ]]; then
+    die "project mismatch: infra/dev.tfvars=$tfproj config=$SHOP_GCP_DEV_PROJECT"
+  fi
+
+  local WIF_PROVIDER="" WIF_SA="" cli_out deploy_ok="unknown" publish_args=()
+  if ! get_wif_credentials "$SHOP_GCP_DEV_PROJECT"; then
+    die "WIF not found — run ./scripts/standup-teardown-env.sh first"
+  fi
+  publish_args+=(publish "$dir" --wif-provider "$WIF_PROVIDER" --wif-service-account "$WIF_SA")
+  [[ "$watch" == "false" ]] && publish_args+=(--no-watch)
+
+  if ! cli_out="$(shop_invoke_ops "${publish_args[@]}" 2>&1)"; then
+    printf '%s\n' "$cli_out" >&2
+    die "publish failed"
+  fi
+  printf '%s\n' "$cli_out"
+  full="$(printf '%s\n' "$cli_out" | sed -n 's/^REPO=//p' | tail -1)"
+  [[ -n "$full" ]] || full="${SHOP_GITHUB_ORG}/${name}"
+  deploy_ok="$(printf '%s\n' "$cli_out" | sed -n 's/^DEPLOY_OK=//p' | tail -1)"
+  [[ -n "$deploy_ok" ]] || deploy_ok="unknown"
+
+  log "published: https://github.com/${full}"
+  SHOP_LAST_SERVICE="$name"
+  export SHOP_GITHUB_ORG SHOP_GOLDENPATH_REPO SHOP_GOLDENPATH_VERSION \
+    SHOP_GCP_DEV_PROJECT SHOP_GCP_PROD_PROJECT SHOP_GCP_REGION SHOP_LAST_SERVICE
+  save_cli_config >/dev/null
+
+  if [[ "$deploy_ok" == "false" ]]; then
+    warn "deploy workflow failed — see https://github.com/${full}/actions"
+    warn "retry: shop publish ${dir}  |  diagnose: shop doctor ${dir}"
+    exit 1
+  fi
+
+  VERIFY_DIR="$dir"
+  [[ -x "$VERIFY_DEPLOY" ]] || chmod +x "$VERIFY_DEPLOY"
+  log "verifying Cloud Run + health (may take ~1 min on cold start)"
+  if ! show_deployment_summary "$full" "${name}-dev"; then
+    warn "health check failed — try: shop verify ${dir}"
+    exit 1
+  fi
+}
+
+cmd_verify() {
+  require_config
+  local dir="."
+  if [[ $# -ge 1 && "${1:0:2}" != "--" ]]; then dir="$1"; shift; fi
+  dir="$(cd "$dir" && pwd)"
+  local name full
+  name="$(basename "$dir")"
+  full="${SHOP_GITHUB_ORG}/${name}"
+  VERIFY_DIR="$dir"
+  [[ -x "$VERIFY_DEPLOY" ]] || chmod +x "$VERIFY_DEPLOY"
+  show_deployment_summary "$full" "${name}-dev" || exit 1
+}
+
+main() {
+  [[ $# -ge 1 ]] || { usage; exit 1; }
+  case "$1" in
+    new) shift; cmd_new "$@" ;;
+    list) cmd_list ;;
+    config) shift; cmd_config "$@" ;;
+    publish) shift; cmd_publish "$@" ;;
+    verify) shift; cmd_verify "$@" ;;
+    doctor) shift; cmd_doctor "$@" ;;
+    upgrade) shift; cmd_upgrade "$@" ;;
+    -h|--help|help) usage ;;
+    *) die "unknown: $1 (try: shop list)" ;;
+  esac
+}
+
+main "$@"

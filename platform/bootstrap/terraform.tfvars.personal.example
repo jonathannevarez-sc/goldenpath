@@ -1,0 +1,13 @@
+# Personal GCP test — ONE isolated project, dev-only, easy teardown.
+# Copy to terraform.tfvars and apply. See docs/environments/sandbox-env.md
+
+personal_test        = true
+test_project_id      = "goldenpath-test-REPLACE"   # dedicated project you create
+region               = "us-central1"
+github_org           = "your-github-username"      # personal GitHub is fine
+github_repo          = "goldenpath"                # platform repo; WIF trusts github_org/*
+artifact_registry_id = "shop-services"             # ARTIFACT_REGISTRY_REPO in config/enterprise.env
+
+# Not used when personal_test = true:
+# dev_project_id  = ""
+# prod_project_id = ""
