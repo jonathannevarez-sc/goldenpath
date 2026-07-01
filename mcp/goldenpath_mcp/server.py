@@ -23,12 +23,29 @@ from goldenpath_mcp.gcp import get_cost_estimate as gcp_get_cost_estimate
 from goldenpath_mcp.gcp import get_deploy_status as gcp_get_deploy_status
 from goldenpath_mcp.gcp import get_service_config as gcp_get_service_config
 from goldenpath_mcp.gcp import list_services as gcp_list_services
+from goldenpath_mcp.gcp import test_iam_permissions as gcp_test_iam_permissions
 from goldenpath_mcp.github_ops import GitHubError
 from goldenpath_mcp.github_ops import trigger_deploy as gh_trigger_deploy
 from goldenpath_mcp.validate import validate_service
 
 settings = Settings.from_env()
 store = ContentStore(settings.repo_root)
+
+
+def _load_composer():
+    """Import the shared service_composer module from the platform repo.
+
+    It is pure-stdlib and lives under scripts/setup; loading it here keeps the
+    data-store permission catalog a single source of truth shared with the
+    wizard and CLI.
+    """
+    import importlib
+    import sys
+
+    setup_dir = str(settings.repo_root / "scripts" / "setup")
+    if setup_dir not in sys.path:
+        sys.path.insert(0, setup_dir)
+    return importlib.import_module("service_composer")
 
 
 def _is_hosted() -> bool:
@@ -181,6 +198,48 @@ def get_cost_estimate(
     return json.dumps(gcp_get_cost_estimate(project, service_name, environment), indent=2)
 
 
+@mcp.tool()
+def check_data_store_permissions(
+    stores: str,
+    project: str | None = None,
+    ip_mode: str = "public",
+) -> str:
+    """Check whether the caller can create the given managed data store(s).
+
+    ``stores`` is a comma-separated list (e.g. "cloud_sql"). Runs
+    testIamPermissions for each store's required permissions and reports, per
+    store, which permissions are missing and which role grants them — the same
+    permission catalog the setup wizard uses to gate options.
+    """
+    project = project or settings.gcp_project
+    if not project:
+        return json.dumps({"error": "project required: pass project= or set GCP_PROJECT"})
+
+    sc = _load_composer()
+    store_ids = [s.strip() for s in stores.split(",") if s.strip()]
+    report: dict = {}
+    for sid in store_ids:
+        if sid not in sc.DATA_STORES:
+            report[sid] = {"error": f"unknown data store '{sid}'"}
+            continue
+        if not sc.DATA_STORES[sid].get("enabled"):
+            report[sid] = {"enabled": False, "reason": "coming in a later release"}
+            continue
+        perms = sc.data_store_permissions(sid, ip_mode)
+        try:
+            granted = set(gcp_test_iam_permissions(project, perms))
+        except GcpError as exc:
+            report[sid] = {"error": str(exc)}
+            continue
+        missing = [p for p in perms if p not in granted]
+        report[sid] = {
+            "can_create": not missing,
+            "missing": missing,
+            "missing_roles": sorted({sc.role_for_permission(sid, p) for p in missing}),
+        }
+    return json.dumps({"project": project, "ip_mode": ip_mode, "stores": report}, indent=2)
+
+
 # --- Write tools (audited) ---
 
 
@@ -193,8 +252,50 @@ def scaffold_service(
     gcp_prod_project: str = "",
     region: str = "",
     output_dir: str = "..",
+    config: str = "",
 ) -> str:
-    """Scaffold a new Golden Path service repo using the shop CLI (audited write)."""
+    """Scaffold a new Golden Path service repo using the shop CLI (audited write).
+
+    Pass ``config`` (a ServiceConfig JSON string — see the composer model) to
+    compose a service with managed data stores, deployment mode, etc.; it drives
+    the template and service name, and org/project values come from
+    config/enterprise.env. Otherwise the simple template path is used.
+    """
+    shop = settings.shop_cli
+    if not shop.is_file():
+        return json.dumps({"error": f"shop CLI not found at {shop}"})
+
+    config_file = None
+    if config:
+        # Validate against the shared composer before writing anything.
+        try:
+            sc = _load_composer()
+            svc = sc.ServiceConfig.from_json(config)
+        except Exception as exc:
+            return json.dumps({"error": f"invalid config JSON: {exc}"})
+        result = sc.validate_config(svc)
+        if not result.ok:
+            return json.dumps(
+                {
+                    "error": "config failed validation",
+                    "issues": [
+                        {"field": i.field, "gate": i.gate, "message": i.message}
+                        for i in result.errors
+                    ],
+                }
+            )
+        import tempfile
+
+        fd = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
+        fd.write(config)
+        fd.close()
+        config_file = fd.name
+        name = svc.service_name
+        template = svc.template
+        cmd = [str(shop), "new", "--config", config_file, "--output", output_dir]
+        audit("scaffold_service", name=name, template=template, config=True)
+        return _run_scaffold(cmd, name, template, output_dir, config_file)
+
     if not github_org or not gcp_dev_project or not gcp_prod_project:
         return json.dumps(
             {
@@ -212,10 +313,6 @@ def scaffold_service(
                 "hint": "Set GCP_REGION in config/enterprise.env or pass region=",
             }
         )
-
-    shop = settings.shop_cli
-    if not shop.is_file():
-        return json.dumps({"error": f"shop CLI not found at {shop}"})
 
     cmd = [
         str(shop),
@@ -236,6 +333,11 @@ def scaffold_service(
     ]
 
     audit("scaffold_service", name=name, template=template, github_org=github_org)
+    return _run_scaffold(cmd, name, template, output_dir, None)
+
+
+def _run_scaffold(cmd, name, template, output_dir, config_file):
+    """Run the shop CLI scaffold command and shape the JSON response."""
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=settings.repo_root)
         target_path = (Path(output_dir).resolve() / name)
@@ -262,6 +364,12 @@ def scaffold_service(
         return json.dumps(payload, indent=2)
     except subprocess.CalledProcessError as exc:
         return json.dumps({"error": exc.stderr or exc.stdout or "scaffold failed"})
+    finally:
+        if config_file:
+            try:
+                os.unlink(config_file)
+            except OSError:
+                pass
 
 
 @mcp.tool()

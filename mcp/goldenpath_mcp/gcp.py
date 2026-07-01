@@ -148,6 +148,30 @@ def get_service_config(project: str, region: str, service_name: str, environment
     }
 
 
+def test_iam_permissions(project: str, permissions: list[str]) -> list[str]:
+    """Return the subset of ``permissions`` the caller holds on ``project``.
+
+    gcloud locally, ADC (Resource Manager REST) on hosted runtime.
+    """
+    if not permissions:
+        return []
+    if _hosted_runtime() or not _gcloud_available():
+        try:
+            return gcp_adc.test_iam_permissions(project, permissions)
+        except Exception as exc:
+            raise GcpError(str(exc)) from exc
+
+    data = _run_gcloud(
+        [
+            "projects",
+            "test-iam-permissions",
+            project,
+            f"--permissions={','.join(permissions)}",
+        ]
+    )
+    return list((data or {}).get("permissions", []))
+
+
 def get_cost_estimate(project: str, service_name: str, environment: str) -> dict[str, Any]:
     """Cost visibility guidance — detailed billing requires Billing API permissions."""
     return {

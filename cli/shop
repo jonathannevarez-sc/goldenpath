@@ -63,16 +63,30 @@ log() { printf '==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 
+preflight_check() {
+  local missing=()
+  command -v python3 >/dev/null 2>&1 || missing+=("python3")
+  command -v gh     >/dev/null 2>&1 || missing+=("gh (GitHub CLI)")
+  command -v gcloud >/dev/null 2>&1 || missing+=("gcloud (Google Cloud SDK)")
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    die "missing required tools: ${missing[*]}
+Install them and re-run:
+  python3  → https://python.org
+  gh       → https://cli.github.com
+  gcloud   → https://cloud.google.com/sdk/docs/install"
+  fi
+}
+
 load_cli_config() {
   [[ -f "$CLI_CONFIG" ]] || return 0
-  while IFS='=' read -r key val; do
-    [[ -z "$key" || -z "$val" ]] && continue
-    if [[ -z "${!key:-}" ]]; then
-      export "${key}=${val}"
-    fi
-  done < <(python3 - "$CLI_CONFIG" <<'PY'
+  local parsed
+  if ! parsed="$(python3 - "$CLI_CONFIG" <<'PY'
 import json, sys
-c = json.load(open(sys.argv[1]))
+try:
+    c = json.load(open(sys.argv[1]))
+except json.JSONDecodeError as e:
+    print(f"error: malformed JSON in config file: {e}", file=sys.stderr)
+    sys.exit(1)
 mapping = {
     "SHOP_GITHUB_ORG": "github_org",
     "SHOP_GOLDENPATH_REPO": "github_platform_repo",
@@ -87,7 +101,16 @@ for env, field in mapping.items():
     if v:
         print(f"{env}={v}")
 PY
-)
+    )"; then
+    warn "could not parse $CLI_CONFIG — delete it and run: shop config init"
+    return 0
+  fi
+  while IFS='=' read -r key val; do
+    [[ -z "$key" || -z "$val" ]] && continue
+    if [[ -z "${!key:-}" ]]; then
+      export "${key}=${val}"
+    fi
+  done <<< "$parsed"
 }
 
 save_cli_config() {
@@ -230,13 +253,29 @@ cmd_config() {
   esac
 }
 
+_catalog_has_template() {
+  python3 -c "
+import json, sys
+try:
+    catalog = json.load(open('${CATALOG}'))
+    sys.exit(0 if sys.argv[1] in catalog else 1)
+except Exception:
+    sys.exit(1)
+" "$1" 2>/dev/null
+}
+
 cmd_new() {
   require_config
   local service_name="" template="nextjs" output_dir="." dry_run="false"
-  [[ $# -ge 1 ]] || { usage; exit 1; }
-  service_name="$1"; shift
+  local custom_runtime="python" custom_port="8080" custom_health="/health"
+  local service_config="" print_config="false"
+  local -a positional=()
+
+  # Single pass: pull flags out; collect positionals (the service name).
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --print-config) print_config="true"; shift ;;
+      --config) service_config="$2"; shift 2 ;;
       --template) template="$2"; shift 2 ;;
       --output) output_dir="$2"; shift 2 ;;
       --github-org) SHOP_GITHUB_ORG="$2"; shift 2 ;;
@@ -244,27 +283,72 @@ cmd_new() {
       --gcp-prod) SHOP_GCP_PROD_PROJECT="$2"; shift 2 ;;
       --region) SHOP_GCP_REGION="$2"; shift 2 ;;
       --dry-run) dry_run="true"; shift ;;
-      *) die "unknown: $1" ;;
+      --runtime) custom_runtime="$2"; shift 2 ;;
+      --port) custom_port="$2"; shift 2 ;;
+      --health) custom_health="$2"; shift 2 ;;
+      -*) die "unknown: $1" ;;
+      *) positional+=("$1"); shift ;;
     esac
   done
   require_config
 
-  [[ ${#service_name} -ge 3 && ${#service_name} -le 40 ]] || die "service name must be 3–40 characters"
-  [[ "$service_name" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ && "$service_name" != *--* ]] || die "invalid service name (lowercase kebab-case, no trailing hyphen)"
-  python3 -c "import json; json.load(open('${CATALOG}'))['${template}']" 2>/dev/null || die "unknown template: ${template}"
-
-  local target_dir cli_out
-  target_dir="$(cd "$output_dir" && pwd)/${service_name}"
-  [[ "$dry_run" == "true" ]] && { log "would create $target_dir"; exit 0; }
-  [[ ! -e "$target_dir" ]] || die "exists: $target_dir"
-
-  log "scaffolding $target_dir ($template)"
-  if ! cli_out="$(shop_invoke_ops scaffold "$service_name" "$template" --output "$(cd "$output_dir" && pwd)" 2>&1)"; then
-    printf '%s\n' "$cli_out" >&2
-    die "scaffold failed"
+  # `shop new --print-config` prints a starter ServiceConfig JSON and exits.
+  if [[ "$print_config" == "true" ]]; then
+    shop_invoke_ops print-config --template "$template"
+    exit $?
   fi
+
+  local target_dir cli_out resolved_output
+  resolved_output="$(cd "$output_dir" && pwd)"
+
+  # `shop new --config svc.json` composes from a full ServiceConfig (data
+  # stores, deployment mode, etc.); the JSON drives template + service name.
+  if [[ -n "$service_config" ]]; then
+    [[ -f "$service_config" ]] || die "config file not found: $service_config"
+    log "composing service from $service_config"
+    if ! cli_out="$(shop_invoke_ops compose --service-config "$service_config" --output "$resolved_output" 2>&1)"; then
+      printf '%s\n' "$cli_out" >&2
+      die "compose failed"
+    fi
+    printf '%s\n' "$cli_out" | sed -n 's/^GENERATED=/  generated: /p'
+  else
+    [[ ${#positional[@]} -ge 1 ]] || { usage; exit 1; }
+    service_name="${positional[0]}"
+
+    [[ ${#service_name} -ge 3 && ${#service_name} -le 40 ]] || die "service name must be 3–40 characters"
+    [[ "$service_name" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ && "$service_name" != *--* ]] || die "invalid service name (lowercase kebab-case, no trailing hyphen)"
+
+    target_dir="${resolved_output}/${service_name}"
+    [[ "$dry_run" == "true" ]] && { log "would create $target_dir"; exit 0; }
+    [[ ! -e "$target_dir" ]] || die "exists: $target_dir"
+
+    if _catalog_has_template "$template"; then
+      log "scaffolding $target_dir ($template)"
+      if ! cli_out="$(shop_invoke_ops scaffold "$service_name" "$template" --output "$resolved_output" 2>&1)"; then
+        printf '%s\n' "$cli_out" >&2
+        die "scaffold failed"
+      fi
+    else
+      warn "template '$template' is not in catalog.json — generating a custom scaffold"
+      warn "  runtime: $custom_runtime | port: $custom_port | health: $custom_health"
+      warn "  (override with --runtime, --port, --health)"
+      log "generating custom scaffold $target_dir"
+      if ! cli_out="$(shop_invoke_ops custom-scaffold "$service_name" \
+          --runtime "$custom_runtime" \
+          --port "$custom_port" \
+          --health-path "$custom_health" \
+          --output "$resolved_output" 2>&1)"; then
+        printf '%s\n' "$cli_out" >&2
+        die "custom scaffold failed"
+      fi
+      local base_tpl
+      base_tpl="$(printf '%s\n' "$cli_out" | sed -n 's/^BASE_TEMPLATE=//p' | tail -1)"
+      [[ -n "$base_tpl" ]] && log "used '$base_tpl' as the base template"
+    fi
+  fi
+
   target_dir="$(printf '%s\n' "$cli_out" | sed -n 's/^SERVICE_DIR=//p' | tail -1)"
-  [[ -n "$target_dir" ]] || target_dir="$(cd "$output_dir" && pwd)/${service_name}"
+  [[ -n "$target_dir" ]] || target_dir="${resolved_output}/${service_name}"
 
   cat <<EOF
 
@@ -403,6 +487,10 @@ cmd_verify() {
 
 main() {
   [[ $# -ge 1 ]] || { usage; exit 1; }
+  case "$1" in
+    -h|--help|help|list) ;;  # no preflight needed for read-only commands
+    *) preflight_check ;;
+  esac
   case "$1" in
     new) shift; cmd_new "$@" ;;
     list) cmd_list ;;

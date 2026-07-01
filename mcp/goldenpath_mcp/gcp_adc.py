@@ -6,9 +6,30 @@ from typing import Any
 
 from google.cloud import run_v2
 
+_CRM_TEST_PERMS_URL = (
+    "https://cloudresourcemanager.googleapis.com/v1/projects/{project}:testIamPermissions"
+)
+
 
 def _run_service_name(service_name: str, environment: str) -> str:
     return f"{service_name}-{environment}"
+
+
+def test_iam_permissions(project: str, permissions: list[str]) -> list[str]:
+    """Return the subset of ``permissions`` the caller holds on the project (ADC)."""
+    import google.auth
+    from google.auth.transport.requests import AuthorizedSession
+
+    creds, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    session = AuthorizedSession(creds)
+    resp = session.post(
+        _CRM_TEST_PERMS_URL.format(project=project),
+        json={"permissions": permissions},
+    )
+    resp.raise_for_status()
+    return list(resp.json().get("permissions", []))
 
 
 def list_services(project: str, region: str) -> list[dict[str, Any]]:

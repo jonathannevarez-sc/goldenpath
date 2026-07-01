@@ -111,6 +111,62 @@ def test_scaffold_service_warns_when_inside_repo(monkeypatch: pytest.MonkeyPatch
     assert "inside GOLDENPATH_ROOT" in out["warnings"][0]
 
 
+def test_check_data_store_permissions_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(server, "gcp_test_iam_permissions", lambda project, permissions: [])
+    out = json.loads(server.check_data_store_permissions("cloud_sql", project="p"))
+    store = out["stores"]["cloud_sql"]
+    assert store["can_create"] is False
+    assert store["missing_roles"]
+
+
+def test_check_data_store_permissions_all_granted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(server, "gcp_test_iam_permissions", lambda project, permissions: list(permissions))
+    out = json.loads(server.check_data_store_permissions("cloud_sql", project="p"))
+    assert out["stores"]["cloud_sql"]["can_create"] is True
+
+
+def test_check_data_store_permissions_disabled_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    out = json.loads(server.check_data_store_permissions("spanner", project="p"))
+    assert out["stores"]["spanner"]["enabled"] is False
+
+
+def test_scaffold_service_with_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import service_composer as sc
+
+    svc = sc.ServiceConfig(
+        service_name="cfg-demo", template="fastapi", runtime="python",
+        deployment_mode="server",
+        data_stores=[sc.DataStoreSpec("cloud_sql", {"engine": "postgresql"})],
+    )
+    with patch("goldenpath_mcp.server.subprocess.run") as run:
+        run.return_value = MagicMock(returncode=0, stdout="scaffolded", stderr="")
+        out = json.loads(
+            server.scaffold_service(name="ignored", config=svc.to_json(), output_dir=str(tmp_path))
+        )
+        cmd = run.call_args.args[0]
+    assert out["status"] == "ok"
+    assert out["service"] == "cfg-demo"
+    assert "--config" in cmd
+
+
+def test_scaffold_service_invalid_config() -> None:
+    out = json.loads(server.scaffold_service(name="x", config='{"template": "fastapi"}'))
+    assert "error" in out
+
+
+def test_scaffold_service_config_fails_validation() -> None:
+    import service_composer as sc
+
+    # SPA + data store is a capability violation → validation error, no scaffold.
+    svc = sc.ServiceConfig(
+        service_name="bad-spa", template="react-spa", runtime="node",
+        deployment_mode="static",
+        data_stores=[sc.DataStoreSpec("cloud_sql", {"engine": "postgresql"})],
+    )
+    out = json.loads(server.scaffold_service(name="x", config=svc.to_json()))
+    assert "issues" in out
+
+
 def test_trigger_deploy_requires_confirm() -> None:
     out = json.loads(server.trigger_deploy("org/repo", confirm=False))
     assert out["error"] == "confirmation required"

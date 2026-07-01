@@ -12,3 +12,9 @@ variable "environment" {
   description = "Environment label (dev, prod)"
   type        = string
 }
+
+variable "iam_propagation_wait" {
+  description = "How long to wait after SA creation before IAM bindings proceed. Increase in high-latency environments."
+  type        = string
+  default     = "15s"
+}

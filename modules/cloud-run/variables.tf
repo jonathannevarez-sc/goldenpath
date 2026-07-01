@@ -114,3 +114,24 @@ variable "allow_unauthenticated" {
   type        = bool
   default     = true
 }
+
+variable "vpc_connector" {
+  description = <<-EOT
+    Serverless VPC Access connector ID (e.g. projects/p/locations/r/connectors/c).
+    Required to reach private-IP data stores (Cloud SQL/AlloyDB private IP).
+    Null disables VPC egress.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "vpc_egress" {
+  description = "VPC egress setting when vpc_connector is set: PRIVATE_RANGES_ONLY or ALL_TRAFFIC"
+  type        = string
+  default     = "PRIVATE_RANGES_ONLY"
+
+  validation {
+    condition     = contains(["PRIVATE_RANGES_ONLY", "ALL_TRAFFIC"], var.vpc_egress)
+    error_message = "vpc_egress must be PRIVATE_RANGES_ONLY or ALL_TRAFFIC."
+  }
+}

@@ -23,6 +23,10 @@ _LIB_DIR = Path(__file__).resolve().parent.parent / "lib"
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
+_SETUP_DIR = Path(__file__).resolve().parent
+if str(_SETUP_DIR) not in sys.path:
+    sys.path.insert(0, str(_SETUP_DIR))
+
 import wizard_defaults as wd  # noqa: E402
 
 SKIP_PATH_FRAGMENTS = (
@@ -180,12 +184,14 @@ def run_cmd(
     cwd: str | Path | None = None,
     timeout: int = 300,
 ) -> CmdResult:
+    _cwd = str(cwd or REPO_ROOT)
     try:
         result = subprocess.run(
             cmd,
-            cwd=str(cwd or REPO_ROOT),
+            cwd=_cwd,
             capture_output=True,
             text=True,
+            timeout=timeout,
         )
         return CmdResult(
             result.returncode,
@@ -193,6 +199,24 @@ def run_cmd(
             result.stderr.strip(),
         )
     except FileNotFoundError:
+        if sys.platform == "win32":
+            # .cmd/.bat wrappers (e.g. gcloud.cmd) can't be run directly —
+            # retry through cmd.exe which resolves PATHEXT properly.
+            try:
+                result = subprocess.run(
+                    ["cmd", "/c"] + list(cmd),
+                    cwd=_cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+                return CmdResult(
+                    result.returncode,
+                    result.stdout.strip(),
+                    result.stderr.strip(),
+                )
+            except Exception:
+                pass
         return CmdResult(127, "", f"Command not found: {cmd[0]}")
     except subprocess.TimeoutExpired:
         return CmdResult(1, "", f"Command timed out after {timeout}s")
@@ -203,6 +227,7 @@ def run_cmd(
 def run_cmd_live(
     cmd: list[str],
     cwd: str | Path | None = None,
+    on_line: Callable[[str], None] | None = None,
 ) -> CmdResult:
     try:
         proc = subprocess.Popen(
@@ -215,8 +240,11 @@ def run_cmd_live(
         stdout_lines: list[str] = []
         assert proc.stdout is not None
         for line in proc.stdout:
-            print(line, end="")
-            stdout_lines.append(line.rstrip("\n"))
+            print(line, end="", flush=True)
+            stripped = line.rstrip("\n")
+            if on_line and stripped:
+                on_line(stripped)
+            stdout_lines.append(stripped)
         proc.wait()
         return CmdResult(proc.returncode or 0, "\n".join(stdout_lines).strip(), "")
     except FileNotFoundError:
@@ -588,13 +616,19 @@ def recover_deploy_local(
     script = REPO_ROOT / "scripts/lib/deploy-recover-local.sh"
     if not script.is_file():
         return False
+    if sys.platform == "win32":
+        bash = shutil.which("bash")
+        if not bash:
+            return False
+        runner = [bash, str(script)]
+    else:
+        runner = [str(script)]
     if not image_tag:
         sha = run_cmd(["git", "rev-parse", "HEAD"], cwd=service_dir)
         if sha.exit_code != 0 or not sha.stdout:
             return False
         image_tag = sha.stdout.strip()
-    args = [str(script), str(service_dir), environment, "--image-tag", image_tag]
-    result = run_cmd(args)
+    result = run_cmd(runner + [str(service_dir), environment, "--image-tag", image_tag])
     return result.exit_code == 0
 
 
@@ -789,6 +823,36 @@ def upgrade_service(service_dir: Path, cfg: dict | None = None) -> Path:
     return service_dir.resolve()
 
 
+def repair_service_tfvars(service_dir: Path, cfg: dict) -> bool:
+    """Patch project_id, artifact_registry_repo, and region in infra/*.tfvars
+    to match the current config.  Returns True if any file was changed."""
+    replacements = {
+        r'(project_id\s*=\s*")[^"]*(")'        : cfg.get("gcp_dev_project", ""),
+        r'(artifact_registry_repo\s*=\s*")[^"]*(")'
+                                                : cfg.get("artifact_registry_repo", "")
+                                                  or cfg.get("ARTIFACT_REGISTRY_REPO", ""),
+        r'(region\s*=\s*")[^"]*(")'             : cfg.get("gcp_region", ""),
+    }
+    prod_overrides = {
+        r'(project_id\s*=\s*")[^"]*(")'        : cfg.get("gcp_prod_project", cfg.get("gcp_dev_project", "")),
+    }
+
+    changed = False
+    for rel, overrides in (("infra/dev.tfvars", replacements), ("infra/prod.tfvars", {**replacements, **prod_overrides})):
+        path = service_dir / rel
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        updated = text
+        for pattern, value in overrides.items():
+            if value:
+                updated = re.sub(pattern, lambda m, v=value: f"{m.group(1)}{v}{m.group(2)}", updated)
+        if updated != text:
+            path.write_text(updated, encoding="utf-8")
+            changed = True
+    return changed
+
+
 def repair_scaffold_tokens(
     service_dir: Path,
     template: str,
@@ -813,6 +877,7 @@ class ScaffoldResult:
     service_name: str
     template: str
     health_check_path: str
+    data_store_notes: list[str] | None = None
 
 
 def scaffold(
@@ -820,7 +885,14 @@ def scaffold(
     template: str,
     output_dir: Path,
     cfg: dict,
+    service_config=None,
 ) -> ScaffoldResult:
+    """Scaffold a service from a template.
+
+    When ``service_config`` (a service_composer.ServiceConfig) is supplied and
+    declares data stores, the base scaffold is extended with the store modules,
+    connection layer, and Terraform wiring via data_store_generator.
+    """
     catalog = load_catalog()
     if template not in catalog:
         names = ", ".join(catalog.keys())
@@ -856,6 +928,18 @@ def scaffold(
             f"deploy.yml still has unreplaced template tokens: {broken}"
         )
 
+    data_store_notes: list[str] = []
+    if service_config is not None and getattr(service_config, "data_stores", None):
+        import data_store_generator as dsg
+
+        data_store_notes = dsg.apply_data_stores(
+            target,
+            service_config,
+            github_org=_cfg_value(cfg, "github_org"),
+            platform_repo=resolve_platform_repo(cfg, service_name),
+            goldenpath_version=wd.resolve_goldenpath_version(REPO_ROOT),
+        )
+
     if cmd_available("git"):
         run_cmd(["git", "init", "-q", "-b", "main"], cwd=target)
         run_cmd(["git", "add", "."], cwd=target)
@@ -875,7 +959,172 @@ def scaffold(
         service_name=service_name,
         template=template,
         health_check_path=str(meta.get("health_check_path", "/health")),
+        data_store_notes=data_store_notes,
     )
+
+
+# Runtime → nearest base template used as the source for custom scaffolds
+_RUNTIME_BASE_TEMPLATE: dict[str, str] = {
+    "python": "fastapi",
+    "node": "express",
+    "docker": "react-spa",
+}
+
+
+def generate_custom_template(
+    name: str,
+    runtime: str,
+    port: int,
+    health_path: str,
+    output_dir: Path,
+    cfg: dict,
+) -> ScaffoldResult:
+    """Generate a custom service scaffold from the closest matching base template.
+
+    The base template is chosen by runtime (python→fastapi, node→express,
+    docker→react-spa). Token replacement runs with the supplied port and
+    health path, then a .goldenpath-custom-catalog.json entry is written
+    next to the new service so the wizard can list it.
+    """
+    err = validate_service_name(name)
+    if err:
+        raise ValueError(err)
+
+    runtime = runtime.lower().strip()
+    base_template = _RUNTIME_BASE_TEMPLATE.get(runtime, "fastapi")
+
+    catalog = load_catalog()
+    if base_template not in catalog:
+        base_template = next(iter(catalog))
+
+    base_meta = dict(catalog[base_template])
+    base_meta["app_runtime"] = runtime
+    base_meta["container_port"] = port
+    base_meta["health_check_path"] = health_path
+
+    template_dir = REPO_ROOT / "templates" / base_template
+    if not template_dir.exists():
+        raise FileNotFoundError(f"Base template directory not found: {template_dir}")
+
+    parent = output_dir.resolve()
+    target = parent / name
+    if target.exists() and any(target.iterdir()):
+        raise FileExistsError(f"Target already exists and is not empty: {target}")
+    target.mkdir(parents=True, exist_ok=True)
+
+    for item in template_dir.iterdir():
+        dest = target / item.name
+        if item.is_dir():
+            shutil.copytree(item, dest, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, dest)
+
+    # Apply tokens with the custom port/health values
+    apply_scaffold_tokens(target, name, cfg, base_meta)
+    upgrade_platform_pins(target, cfg)
+
+    # Write a local catalog override so UIs can list this custom service
+    custom_catalog_path = parent / ".goldenpath-custom-catalog.json"
+    existing: dict = {}
+    if custom_catalog_path.exists():
+        try:
+            existing = json.loads(custom_catalog_path.read_text())
+        except json.JSONDecodeError:
+            existing = {}
+    existing[name] = {
+        "description": f"Custom {runtime} service (port {port})",
+        "app_runtime": runtime,
+        "container_port": port,
+        "health_check_path": health_path,
+        "custom": True,
+        "base_template": base_template,
+    }
+    custom_catalog_path.write_text(json.dumps(existing, indent=2))
+
+    if cmd_available("git"):
+        run_cmd(["git", "init", "-q", "-b", "main"], cwd=target)
+        run_cmd(["git", "add", "."], cwd=target)
+        run_cmd(
+            ["git", "commit", "-q", "-m",
+             f"chore: scaffold {name} (custom {runtime} from {base_template} base)"],
+            cwd=target,
+        )
+
+    return ScaffoldResult(
+        service_dir=target,
+        service_name=name,
+        template=base_template,
+        health_check_path=health_path,
+    )
+
+
+# ── Data-store IAM permission gating ──────────────────────────────────────────
+
+_PERM_PROBE_CACHE: dict[tuple, dict] = {}
+
+
+def probe_data_store_permissions(
+    project: str,
+    store_ids: list[str],
+    ip_mode: str = "public",
+) -> dict[str, dict]:
+    """Probe testIamPermissions for each data store's required permissions.
+
+    Returns ``{store_id: {"granted": [...], "missing": [...],
+    "missing_roles": [...], "unknown": bool}}``. When gcloud/project is
+    unavailable the store is marked ``unknown`` (not blocked) so the UI can
+    surface "could not verify" rather than a false negative.
+    """
+    import service_composer as sc
+
+    report: dict[str, dict] = {}
+    have_gcloud = bool(project) and cmd_available("gcloud")
+
+    for sid in store_ids:
+        perms = sc.data_store_permissions(sid, ip_mode)
+        if not perms:
+            report[sid] = {"granted": [], "missing": [], "missing_roles": [], "unknown": False}
+            continue
+        if not have_gcloud:
+            report[sid] = {"granted": [], "missing": [], "missing_roles": [], "unknown": True}
+            continue
+
+        key = (project, sid, ip_mode)
+        cached = _PERM_PROBE_CACHE.get(key)
+        if cached is not None:
+            report[sid] = cached
+            continue
+
+        res = run_cmd(
+            [
+                "gcloud",
+                "projects",
+                "test-iam-permissions",
+                project,
+                f"--permissions={','.join(perms)}",
+                "--format=json",
+            ],
+            timeout=20,
+        )
+        if res.exit_code != 0:
+            entry = {"granted": [], "missing": [], "missing_roles": [], "unknown": True, "error": res.stderr}
+        else:
+            try:
+                granted = set(json.loads(res.stdout).get("permissions", [])) if res.stdout else set()
+            except json.JSONDecodeError:
+                granted = set()
+            missing = [p for p in perms if p not in granted]
+            roles = sorted({sc.role_for_permission(sid, p) for p in missing})
+            entry = {
+                "granted": sorted(granted),
+                "missing": missing,
+                "missing_roles": roles,
+                "unknown": False,
+            }
+        _PERM_PROBE_CACHE[key] = entry
+        report[sid] = entry
+
+    return report
 
 
 def _wif_sa_binding(policy_json: str, member: str, role: str) -> bool:
@@ -891,19 +1140,34 @@ def _wif_sa_binding(policy_json: str, member: str, role: str) -> bool:
     return False
 
 
-def add_wif_trust(gcp_project: str, github_org: str, repo_name: str) -> None:
+def add_wif_trust(
+    gcp_project: str,
+    github_org: str,
+    repo_name: str,
+    on_step: Callable[[str], None] | None = None,
+) -> None:
+    def step(msg: str) -> None:
+        print(msg, flush=True)
+        if on_step:
+            on_step(msg)
+
+    # On Windows, skip the bash script — python3 is not reliably in Git Bash's PATH
+    # and the pipe-based has_binding() check hangs. Use the pure-Python gcloud path.
     trust_script = REPO_ROOT / "scripts/lib/wif-trust-repo.sh"
-    if trust_script.is_file():
-        result = run_cmd(
-            [str(trust_script), gcp_project, github_org, repo_name],
-            timeout=180,
-        )
+    use_bash_script = trust_script.is_file() and sys.platform != "win32"
+    if use_bash_script:
+        cmd = [str(trust_script), gcp_project, github_org, repo_name]
+        step("  Granting GitHub Actions access to GCP (IAM propagation takes ~2 min) ...")
+        result = run_cmd_live(cmd, on_line=on_step)
         if result.exit_code != 0:
             detail = result.stderr or result.stdout or "unknown error"
             raise RuntimeError(f"WIF trust failed: {detail}")
         return
 
+    # Pure-Python gcloud path (used on Windows and when bash script is absent)
+    # run_cmd handles gcloud.cmd via cmd /c fallback on Windows automatically.
     sa = f"github-actions@{gcp_project}.iam.gserviceaccount.com"
+    step("  Looking up GCP project number ...")
     num = run_cmd(
         [
             "gcloud",
@@ -914,7 +1178,8 @@ def add_wif_trust(gcp_project: str, github_org: str, repo_name: str) -> None:
         ]
     )
     if num.exit_code != 0 or not num.stdout:
-        raise RuntimeError(f"Could not get project number for {gcp_project}")
+        raise RuntimeError(f"Could not get project number for {gcp_project}: {num.stderr or num.stdout}")
+    step("  Finding workload identity pool ...")
     pool = run_cmd(
         [
             "gcloud",
@@ -927,7 +1192,7 @@ def add_wif_trust(gcp_project: str, github_org: str, repo_name: str) -> None:
         ]
     )
     if pool.exit_code != 0 or not pool.stdout:
-        raise RuntimeError(f"No WIF pool in {gcp_project}")
+        raise RuntimeError(f"No WIF pool in {gcp_project}: {pool.stderr or pool.stdout}")
     pool_id = re.sub(
         r".*/workloadIdentityPools/", "", pool.stdout.splitlines()[0]
     )
@@ -952,7 +1217,9 @@ def add_wif_trust(gcp_project: str, github_org: str, repo_name: str) -> None:
             ]
         )
         if _wif_sa_binding(policy.stdout, member, role):
+            step(f"  {role} — already bound")
             continue
+        step(f"  Binding {role} ...")
         bind = run_cmd(
             [
                 "gcloud",
@@ -967,7 +1234,11 @@ def add_wif_trust(gcp_project: str, github_org: str, repo_name: str) -> None:
             ]
         )
         if bind.exit_code != 0:
-            raise RuntimeError(f"WIF binding failed for {role}")
+            raise RuntimeError(f"WIF binding failed for {role}: {bind.stderr or bind.stdout}")
+    step("  Waiting for IAM to propagate ...")
+    for i in range(1, 10):
+        time.sleep(5)
+        step(f"  Propagation wait ... {i * 5}s / 45s")
 
 
 def _platform_repo_visibility(github_org: str, platform_repo: str) -> str:
@@ -1086,28 +1357,62 @@ def resolve_deploy_run_id(full_repo: str, initial_delay: int = 8) -> str | None:
     return str(latest["databaseId"])
 
 
-def wait_deploy_run(full_repo: str, initial_delay: int = 8) -> bool:
+def wait_deploy_run(
+    full_repo: str,
+    initial_delay: int = 8,
+    on_step: Callable[[str], None] | None = None,
+) -> bool:
+    def step(msg: str) -> None:
+        print(msg, flush=True)
+        if on_step:
+            on_step(msg)
+
+    step("  Waiting for workflow to start ...")
     run_id = resolve_deploy_run_id(full_repo, initial_delay=initial_delay)
     if not run_id:
+        step("  No deploy workflow run found.")
         return False
-    print(
-        f"  Watching deploy: https://github.com/{full_repo}/actions/runs/{run_id}"
-    )
-    print("  (live workflow output below — may take several minutes)")
-    print()
-    result = run_cmd_live(
-        [
-            "gh",
-            "run",
-            "watch",
-            run_id,
-            "--repo",
-            full_repo,
-            "--exit-status",
-        ]
-    )
-    print()
-    return result.exit_code == 0
+
+    run_url = f"https://github.com/{full_repo}/actions/runs/{run_id}"
+    step(f"  Deploy workflow: {run_url}")
+
+    max_wait = 600
+    poll_interval = 15
+    elapsed = 0
+    last_status = None
+
+    while elapsed < max_wait:
+        result = run_cmd(
+            [
+                "gh",
+                "run",
+                "view",
+                run_id,
+                "--repo",
+                full_repo,
+                "--json",
+                "status,conclusion,name",
+            ]
+        )
+        if result.exit_code == 0:
+            try:
+                data = json.loads(result.stdout)
+                status_str = data.get("status", "")
+                conclusion = data.get("conclusion")
+                name = data.get("name", "deploy")
+                if status_str != last_status:
+                    step(f"  [{name}] {status_str} ...")
+                    last_status = status_str
+                if conclusion:
+                    step(f"  [{name}] finished: {conclusion}")
+                    return conclusion == "success"
+            except (json.JSONDecodeError, KeyError):
+                pass
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+    step(f"  Timed out after {max_wait}s — check: {run_url}")
+    return False
 
 
 @dataclass
@@ -1142,8 +1447,17 @@ def publish(
 
     tf_project = _service_project_from_tfvars(service_dir)
     if tf_project and tf_project != gcp_project:
-        raise RuntimeError(
-            f"infra/dev.tfvars has '{tf_project}' but config has '{gcp_project}'"
+        step(
+            f"[0/5] Updating service config from '{tf_project}' → '{gcp_project}' ..."
+        )
+        repair_service_tfvars(service_dir, cfg)
+        run_cmd(
+            ["git", "add", "infra/dev.tfvars", "infra/prod.tfvars"],
+            cwd=service_dir,
+        )
+        run_cmd(
+            ["git", "commit", "-m", f"chore: update project IDs to {gcp_project}"],
+            cwd=service_dir,
         )
 
     upgrade_platform_pins(service_dir, cfg)
@@ -1160,8 +1474,27 @@ def publish(
     if not (service_dir / ".git").exists():
         raise RuntimeError(f"Not a git repo: {service_dir}")
 
-    branch = run_cmd(["git", "branch", "--show-current"], cwd=service_dir)
-    if branch.stdout.strip() != "main":
+    # Ensure there is at least one commit (git init may have succeeded but
+    # the auto-commit could have been skipped if git wasn't available earlier).
+    log_check = run_cmd(["git", "log", "--oneline", "-1"], cwd=service_dir)
+    if log_check.exit_code != 0 or not log_check.stdout.strip():
+        step("[pre] No commits found — making initial commit ...")
+        run_cmd(["git", "add", "-A"], cwd=service_dir)
+        ic = run_cmd(
+            ["git", "commit", "-m", f"chore: scaffold {service_name} from golden path"],
+            cwd=service_dir,
+        )
+        if ic.exit_code != 0:
+            raise RuntimeError(f"Initial commit failed: {ic.stderr or ic.stdout}")
+
+    # Normalise to 'main'.  Use symbolic-ref (works on all git versions);
+    # fall back to branch --show-current if symbolic-ref isn't available.
+    ref = run_cmd(["git", "symbolic-ref", "--short", "HEAD"], cwd=service_dir)
+    cur_branch = ref.stdout.strip() if ref.exit_code == 0 else ""
+    if not cur_branch:
+        show = run_cmd(["git", "branch", "--show-current"], cwd=service_dir)
+        cur_branch = show.stdout.strip()
+    if cur_branch and cur_branch != "main":
         run_cmd(["git", "branch", "-M", "main"], cwd=service_dir)
 
     if not wif_provider or not wif_service_account:
@@ -1256,22 +1589,41 @@ def publish(
             raise RuntimeError("Failed to set GOLDENPATH_MODULE_TOKEN")
 
     step(f"[3/5] Adding WIF trust for {full_repo} ...")
-    add_wif_trust(gcp_project, cfg["github_org"], service_name)
+    add_wif_trust(gcp_project, cfg["github_org"], service_name, on_step=on_step)
 
     step("[4/5] Pushing main branch ...")
     push = run_cmd(["git", "push", "-u", "origin", "main"], cwd=service_dir)
     if push.exit_code != 0:
-        raise RuntimeError("git push failed")
+        detail = (push.stderr or push.stdout or "unknown error").strip()
+        step(f"  Push output: {detail}")
+        if "src refspec main does not match" in detail:
+            # Branch still not called 'main' — force-rename whatever HEAD is
+            step("[4/5] Branch name mismatch — renaming current branch to main ...")
+            run_cmd(["git", "branch", "-M", "main"], cwd=service_dir)
+            push = run_cmd(["git", "push", "-u", "origin", "main"], cwd=service_dir)
+        elif "rejected" in detail or "fetch first" in detail or "non-fast-forward" in detail:
+            # GitHub auto-initialises new repos with a README — remote has commits
+            # that aren't in the local history.  Force-push is safe here because
+            # the repo was just created and the scaffolded code is authoritative.
+            step("[4/5] Remote has diverged history (GitHub auto-init) — force-pushing ...")
+            push = run_cmd(
+                ["git", "push", "-u", "origin", "main", "--force-with-lease"],
+                cwd=service_dir,
+            )
+        if push.exit_code != 0:
+            detail = (push.stderr or push.stdout or "unknown error").strip()
+            raise RuntimeError(f"git push failed: {detail}")
 
     deploy_ok: bool | None = None
     if watch_deploy:
         step("[5/5] Waiting for deploy workflow ...")
-        deploy_ok = wait_deploy_run(full_repo)
+        deploy_ok = wait_deploy_run(full_repo, on_step=on_step)
         if not deploy_ok:
             latest = _latest_deploy_run(full_repo)
             if latest and latest.get("conclusion") == "failure":
                 failed_id = str(latest.get("databaseId", ""))
                 if failed_id and not _is_workflow_startup_failure(full_repo, latest):
+                    step("  Retrying failed workflow run ...")
                     rerun = run_cmd(
                         [
                             "gh",
@@ -1283,10 +1635,11 @@ def publish(
                         ]
                     )
                     if rerun.exit_code == 0:
-                        deploy_ok = wait_deploy_run(full_repo, initial_delay=10)
+                        deploy_ok = wait_deploy_run(full_repo, initial_delay=10, on_step=on_step)
             if not deploy_ok:
+                step("  Triggering deploy workflow manually ...")
                 _trigger_deploy_workflow(full_repo)
-                deploy_ok = wait_deploy_run(full_repo, initial_delay=10)
+                deploy_ok = wait_deploy_run(full_repo, initial_delay=10, on_step=on_step)
 
         if not deploy_ok:
             step("GitHub deploy failed — attempting local Terraform recovery ...")

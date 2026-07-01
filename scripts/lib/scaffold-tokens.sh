@@ -60,6 +60,20 @@ replace_tokens() {
   done
 }
 
+validate_no_tokens_remain() {
+  local dir="$1"
+  local remaining
+  remaining="$(find "$dir" -type f \
+    ! -path '*/.git/*' ! -path '*/node_modules/*' ! -path '*/__pycache__/*' \
+    -print0 | xargs -0 grep -rlE '\{\{[A-Z_]+\}\}' 2>/dev/null || true)"
+  if [[ -n "$remaining" ]]; then
+    printf 'error: unreplaced template tokens remain in:\n' >&2
+    printf '  %s\n' $remaining >&2
+    return 1
+  fi
+  return 0
+}
+
 repair_tokens_if_needed() {
   local dir="$1" service="$2"
   deploy_has_tokens "$dir" || return 0

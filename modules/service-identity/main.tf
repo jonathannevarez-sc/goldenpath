@@ -13,5 +13,5 @@ resource "google_service_account" "runtime" {
 resource "time_sleep" "wait_for_sa" {
   depends_on = [google_service_account.runtime]
 
-  create_duration = "15s"
+  create_duration = var.iam_propagation_wait
 }

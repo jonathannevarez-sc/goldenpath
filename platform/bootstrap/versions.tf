@@ -8,9 +8,15 @@ terraform {
     }
   }
 
-  # Uncomment and set after creating a state bucket (recommended before apply).
+  # ── Remote state (strongly recommended for team use) ───────────────────────
+  # Step 1: run once with local state to create the bucket, then:
+  # Step 2: uncomment the block below and run:
+  #   terraform init -migrate-state \
+  #     -backend-config="bucket=YOUR_ORG-goldenpath-tfstate"
+  #
+  # The bucket name must match tfstate_bucket_name in your terraform.tfvars.
   # backend "gcs" {
-  #   bucket = "shop-goldenpath-tfstate"
+  #   bucket = "YOUR_ORG-goldenpath-tfstate"   # replace with your bucket name
   #   prefix = "platform/bootstrap"
   # }
 }

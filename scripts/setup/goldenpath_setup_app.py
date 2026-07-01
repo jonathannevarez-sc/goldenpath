@@ -59,6 +59,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts" / "lib"))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "setup"))
 import wizard_defaults as wd  # noqa: E402
 import goldenpath_ops as ops  # noqa: E402
+import service_composer as sc  # noqa: E402
 
 CONFIG_PATH = REPO_ROOT / ".goldenpath-setup.local.json"
 BOOTSTRAP_DIR = REPO_ROOT / "platform/bootstrap"
@@ -84,11 +85,68 @@ SETUP_STEPS = [
 ]
 
 NAV_GROUPS = {
-    "Start": ["Dashboard", "Guided Wizard"],
-    "Setup": ["Settings", "Prerequisites", "Bootstrap", "WIF Secrets"],
-    "Deploy": ["Scaffold", "Publish", "Verify", "Doctor"],
-    "More": ["MCP Config", "Teardown", "Fresh Start"],
+    "Get Started": ["Dashboard", "Guided Wizard", "Settings", "Prerequisites"],
+    "Deploy": ["Bootstrap", "Scaffold", "Publish", "Verify"],
+    "Manage": ["Doctor", "WIF Secrets", "MCP Config", "Teardown", "Fresh Start"],
 }
+
+# Plain-English labels for each page shown in the navigation dropdown
+PAGE_LABELS: dict[str, str] = {
+    "Dashboard": "Dashboard",
+    "Guided Wizard": "Guided Wizard",
+    "Settings": "Settings",
+    "Prerequisites": "Prerequisites",
+    "Bootstrap": "Set up Google Cloud (first time)",
+    "WIF Secrets": "Connect GitHub to Google Cloud",
+    "Scaffold": "Create a new service",
+    "Publish": "Deploy your service",
+    "Verify": "Check if service is live",
+    "Doctor": "Diagnose a broken deploy",
+    "MCP Config": "MCP Config",
+    "Teardown": "Teardown",
+    "Fresh Start": "Fresh Start",
+}
+
+NAV_ICONS: dict[str, str] = {
+    "Dashboard": "🏠",
+    "Guided Wizard": "🧙",
+    "Settings": "⚙️",
+    "Prerequisites": "🔧",
+    "Bootstrap": "☁️",
+    "Scaffold": "🏗️",
+    "Publish": "🚀",
+    "Verify": "🔍",
+    "Doctor": "🩺",
+    "WIF Secrets": "🔑",
+    "MCP Config": "🤖",
+    "Teardown": "🗑️",
+    "Fresh Start": "↺",
+}
+
+STEP_DESCRIPTIONS: dict[str, str] = {
+    "settings": "Choose your Google Cloud project and GitHub organization.",
+    "prerequisites": "Install the required command-line tools.",
+    "bootstrap": "Create your Google Cloud infrastructure (one-time setup).",
+    "wif": "Connect GitHub to Google Cloud so deploys happen automatically.",
+    "scaffold": "Generate your service from a ready-to-deploy template.",
+    "publish": "Push your code to GitHub and trigger the first deploy.",
+    "verify": "Confirm your service is live on the internet.",
+}
+
+STEP_ICONS: dict[str, str] = {
+    "settings": "⚙️",
+    "prerequisites": "🔧",
+    "bootstrap": "☁️",
+    "wif": "🔑",
+    "scaffold": "🏗️",
+    "publish": "🚀",
+    "verify": "✅",
+}
+
+# Pages that require bootstrap-level IAM (Owner / Project Creator)
+_BOOTSTRAP_PAGES = {"Bootstrap"}
+# Pages that require at least deploy-level IAM (run.admin + WIF admin)
+_DEPLOY_PAGES = {"Scaffold", "Publish", "WIF Secrets"}
 
 PAGES = [page for group in NAV_GROUPS.values() for page in group]
 
@@ -278,41 +336,6 @@ section[data-testid="stMain"] {
     padding-right: 0 !important;
 }
 
-[data-testid="stSidebar"] [data-testid="stSelectbox"] label {
-    font-size: 0.78rem !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--gp-accent) !important;
-}
-
-[data-testid="stSidebar"] .gp-nav-panel {
-    position: sticky;
-    top: 0;
-    z-index: 6;
-    margin: 0 0 0.75rem;
-    padding: 0 0 0.5rem;
-    background: linear-gradient(
-        180deg,
-        rgba(238, 242, 251, 0.96) 0%,
-        rgba(238, 242, 251, 0.88) 70%,
-        rgba(238, 242, 251, 0) 100%
-    );
-}
-
-[data-testid="stSidebar"] .gp-nav-panel [data-testid="stVerticalBlockBorderWrapper"] {
-    background: var(--gp-glass-strong) !important;
-    border: 1px solid rgba(91, 106, 247, 0.28) !important;
-    border-left: 3px solid var(--gp-accent) !important;
-    box-shadow: var(--gp-glass-shadow);
-    backdrop-filter: var(--gp-blur);
-    -webkit-backdrop-filter: var(--gp-blur);
-}
-
-[data-testid="stSidebar"] .gp-sidebar-footer {
-    margin-top: auto;
-    padding-top: 0.75rem;
-}
 
 section[data-testid="stMain"] > div {
     padding-top: 0 !important;
@@ -735,17 +758,325 @@ div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
     .gp-hero-title { font-size: 1.05rem; }
     .gp-glass-hero { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Sidebar navigation ──────────────────────────────────────────────────── */
+
+.gp-nav-group {
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gp-muted);
+    padding: 0.6rem 0.65rem 0.15rem;
+    margin-top: 0.2rem;
+    pointer-events: none;
+}
+
+/* Active page indicator — styled div, not a button */
+.gp-nav-active {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.38rem 0.7rem;
+    margin: 0.05rem 0;
+    background: rgba(91, 106, 247, 0.1);
+    border-left: 3px solid var(--gp-accent);
+    border-radius: 0 8px 8px 0;
+    color: var(--gp-accent);
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: default;
+    user-select: none;
+}
+
+/* Nav buttons — override global button styles within sidebar */
+[data-testid="stSidebar"] .stButton > button {
+    text-align: left !important;
+    justify-content: flex-start !important;
+    padding: 0.38rem 0.7rem !important;
+    font-size: 0.83rem !important;
+    font-weight: 500 !important;
+    min-height: 2rem !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: var(--gp-text) !important;
+    transform: none !important;
+    margin-bottom: 0.05rem !important;
+}
+
+[data-testid="stSidebar"] .stButton > button:hover:not(:disabled) {
+    background: rgba(91, 106, 247, 0.07) !important;
+    color: var(--gp-accent) !important;
+    border: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+[data-testid="stSidebar"] .stButton > button::before {
+    display: none !important;
+}
+
+[data-testid="stSidebar"] .stButton {
+    margin-bottom: 0 !important;
+}
+
+/* Compact status strip at the bottom of the sidebar */
+.gp-status-strip {
+    font-size: 0.72rem;
+    line-height: 1.7;
+    color: var(--gp-muted);
+    padding: 0.4rem 0.65rem 0.2rem;
+}
+
+.gp-status-strip strong {
+    color: var(--gp-text);
+    font-weight: 600;
+}
+
+/* ── Dashboard step cards ─────────────────────────────────────────────────── */
+
+.gp-step-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8rem;
+    padding: 0.7rem 0.9rem;
+    border-radius: 10px;
+    background: var(--gp-glass-strong);
+    backdrop-filter: var(--gp-blur);
+    -webkit-backdrop-filter: var(--gp-blur);
+    border: 1px solid var(--gp-glass-border);
+    border-left: 3px solid transparent;
+    margin-bottom: 0.4rem;
+}
+
+.gp-step-card-done {
+    border-left-color: #0d9b76;
+    opacity: 0.8;
+}
+
+.gp-step-card-next {
+    border-left-color: var(--gp-accent);
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 4px 18px rgba(91, 106, 247, 0.12);
+}
+
+.gp-step-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+    line-height: 1;
+}
+
+.gp-step-body { flex: 1; }
+
+.gp-step-body h4 {
+    margin: 0;
+    font-size: 0.87rem;
+    font-weight: 600;
+    color: var(--gp-text);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.gp-step-body p {
+    margin: 0.1rem 0 0;
+    font-size: 0.76rem;
+    color: var(--gp-muted);
+    line-height: 1.35;
+}
+
+.gp-step-badge-done {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #047857;
+    background: rgba(16, 185, 129, 0.14);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    border-radius: 999px;
+    padding: 0.1rem 0.45rem;
+    letter-spacing: 0.04em;
+}
+
+.gp-step-badge-next {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--gp-accent);
+    background: rgba(91, 106, 247, 0.1);
+    border: 1px solid rgba(91, 106, 247, 0.22);
+    border-radius: 999px;
+    padding: 0.1rem 0.45rem;
+    letter-spacing: 0.04em;
+}
+
+/* ── Guided Wizard stepper ───────────────────────────────────────────────── */
+
+.gp-wizard-stepper {
+    display: flex;
+    align-items: flex-start;
+    margin: 0.5rem 0 1.25rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+}
+
+.gp-wizard-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 1;
+    min-width: 3.5rem;
+    position: relative;
+}
+
+.gp-wizard-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 1rem;
+    left: calc(50% + 1.05rem);
+    right: calc(-50% + 1.05rem);
+    height: 2px;
+    background: rgba(91, 106, 247, 0.12);
+    z-index: 0;
+}
+
+.gp-wizard-step.gp-wiz-done:not(:last-child)::after {
+    background: var(--gp-accent);
+}
+
+.gp-wiz-bubble {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.55);
+    border: 2px solid rgba(91, 106, 247, 0.18);
+    color: var(--gp-muted);
+    position: relative;
+    z-index: 1;
+}
+
+.gp-wiz-done .gp-wiz-bubble {
+    background: var(--gp-accent);
+    border-color: var(--gp-accent);
+    color: white;
+}
+
+.gp-wiz-current .gp-wiz-bubble {
+    background: white;
+    border-color: var(--gp-accent);
+    color: var(--gp-accent);
+    box-shadow: 0 0 0 4px rgba(91, 106, 247, 0.15);
+}
+
+.gp-wiz-label {
+    font-size: 0.6rem;
+    font-weight: 500;
+    color: var(--gp-muted);
+    text-align: center;
+    line-height: 1.25;
+    max-width: 4rem;
+}
+
+.gp-wiz-current .gp-wiz-label {
+    color: var(--gp-accent);
+    font-weight: 700;
+}
+
+.gp-wiz-done .gp-wiz-label {
+    color: var(--gp-text);
+    font-weight: 600;
+}
 </style>
         """,
         unsafe_allow_html=True,
     )
 
 
-def nav_label(page: str) -> str:
-    for group, pages in NAV_GROUPS.items():
-        if page in pages:
-            return f"{group} · {page}"
-    return page
+# ── GCP IAM capability detection ──────────────────────────────────────────────
+
+_IAM_CACHE: dict[str, str] = {}
+
+_BOOTSTRAP_ROLES = {
+    "roles/owner",
+    "roles/editor",
+    "roles/resourcemanager.projectCreator",
+    "roles/resourcemanager.organizationAdmin",
+}
+_DEPLOY_ROLES = {
+    "roles/run.admin",
+    "roles/iam.workloadIdentityPoolAdmin",
+    "roles/iam.serviceAccountAdmin",
+}
+
+
+def detect_gcp_iam_level(project: str) -> str:
+    """Return 'bootstrap', 'deploy', or 'readonly' based on current gcloud roles.
+
+    Results are cached per-project in the process lifetime to avoid repeated
+    gcloud calls on every sidebar render.
+    """
+    if not project or not shutil.which("gcloud"):
+        return "unknown"
+    cached = _IAM_CACHE.get(project)
+    if cached:
+        return cached
+
+    try:
+        import subprocess as _sp
+        result = _sp.run(
+            [
+                "gcloud", "projects", "get-iam-policy", project,
+                "--flatten=bindings[].members",
+                "--format=value(bindings.role)",
+                "--filter=bindings.members:user:",
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            _IAM_CACHE[project] = "unknown"
+            return "unknown"
+        roles = set(result.stdout.strip().splitlines())
+        if roles & _BOOTSTRAP_ROLES:
+            level = "bootstrap"
+        elif roles & _DEPLOY_ROLES:
+            level = "deploy"
+        else:
+            level = "readonly"
+    except Exception:
+        level = "unknown"
+
+    _IAM_CACHE[project] = level
+    return level
+
+
+def _iam_indicator_html(level: str) -> str:
+    """Return a small HTML badge + capability list for the sidebar."""
+    if level == "bootstrap":
+        badge = '<span class="gp-pill gp-pill-ok">Full access</span>'
+        items = "Create GCP projects, bootstrap infra, deploy, verify"
+    elif level == "deploy":
+        badge = '<span class="gp-pill gp-pill-warn">Deploy only</span>'
+        items = "Scaffold services, deploy to Cloud Run, verify — cannot create new GCP projects"
+    elif level == "readonly":
+        badge = '<span class="gp-pill gp-pill-warn">Read only</span>'
+        items = "View and verify existing services — contact your admin to deploy"
+    else:
+        return ""
+    return (
+        f'<div class="gp-glass gp-env" style="margin-top:0.4rem">'
+        f'<dt>Permissions</dt><dd>{badge}</dd>'
+        f'<dt style="grid-column:1/-1;color:var(--gp-muted);font-size:0.66rem;margin-top:0.2rem">'
+        f'{items}</dt>'
+        f"</div>"
+    )
 
 
 def render_page_header(
@@ -785,7 +1116,7 @@ def section(title: str):
 
 def navigate_to(page: str) -> None:
     if page in PAGES:
-        st.session_state.nav_page = page
+        st.session_state.current_page = page
         st.rerun()
 
 
@@ -801,15 +1132,21 @@ def default_config() -> dict:
 
 
 def load_config() -> dict:
-    cfg = wd.merge_saved_config(CONFIG_PATH, REPO_ROOT)
-    wd.apply_enterprise_env_overrides(cfg, REPO_ROOT)
+    # Start with enterprise.env defaults so nothing is missing.
+    cfg = wd.default_wizard_config(REPO_ROOT)
+    # Overlay whatever the user explicitly saved — their choices win.
+    if CONFIG_PATH.is_file():
+        try:
+            saved = json.loads(CONFIG_PATH.read_text())
+            cfg.update(saved)
+        except Exception:
+            pass
     if cfg.get("profile") in ("teardown", "enterprise"):
         cfg["profile"] = "sandbox"
     return cfg
 
 
 def save_config(cfg: dict):
-    wd.apply_enterprise_env_overrides(cfg, REPO_ROOT)
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
     st.session_state.config = cfg
     invalidate_setup_status()
@@ -886,9 +1223,34 @@ def cmd_available(name: str) -> bool:
     return shutil.which(name) is not None
 
 
+_ERROR_HINTS: list[tuple[str, str]] = [
+    ("permission denied", "Your Google Cloud account may lack the required IAM role. Ask your admin for `roles/owner` or `roles/run.admin`."),
+    ("quota", "You've hit a GCP quota limit. Visit the GCP console → IAM & Admin → Quotas to request an increase."),
+    ("billing", "Billing is not enabled on this project. Go to GCP console → Billing and link a billing account."),
+    ("already exists", "A resource with that name already exists. Try a different name, or run Teardown first."),
+    ("not found", "A referenced resource was not found. Make sure Bootstrap completed successfully before this step."),
+    ("timed out", "The command took too long. Check your network connection and try again."),
+    ("command not found", "A required CLI tool is missing. Re-run Prerequisites to check which tools need to be installed."),
+    ("authentication", "gcloud authentication failed. Run `gcloud auth login` in your terminal, then try again."),
+    ("api not enabled", "A Google Cloud API is not enabled. Bootstrap should enable it automatically — try re-running Bootstrap."),
+]
+
+
+def _error_hint(stderr: str) -> str | None:
+    lower = (stderr or "").lower()
+    for keyword, hint in _ERROR_HINTS:
+        if keyword in lower:
+            return hint
+    return None
+
+
 def show_cmd_result(code: int, stdout: str, stderr: str, label: str = "Output"):
+    if code != 0:
+        hint = _error_hint(stderr or stdout)
+        if hint:
+            st.warning(f"**What to try:** {hint}")
     if stdout or stderr:
-        with st.expander(f"📋 {label}", expanded=(code != 0)):
+        with st.expander(f"{'❌' if code != 0 else '📋'} {label}", expanded=(code != 0)):
             if stdout:
                 st.code(stdout, language="text")
             if stderr:
@@ -1094,41 +1456,57 @@ def next_setup_step(status: dict[str, bool]) -> str | None:
 def render_sidebar() -> str:
     cfg = st.session_state.config
     status = compute_setup_status(cfg)
-    default_page = st.session_state.pop("nav_page", "Dashboard")
-    default_index = PAGES.index(default_page) if default_page in PAGES else 0
-    wif_cls = "gp-pill-ok" if status["wif"] else "gp-pill-warn"
-    wif_text = "WIF ready" if status["wif"] else "WIF pending"
-    last_svc = cfg.get("last_service") or "—"
+
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "Dashboard"
+    current = st.session_state.current_page
 
     with st.sidebar:
         st.markdown(sidebar_brand_html(), unsafe_allow_html=True)
 
-        st.markdown('<div class="gp-nav-panel">', unsafe_allow_html=True)
-        with st.container(border=True):
-            page = st.selectbox(
-                "Navigate",
-                PAGES,
-                index=default_index,
-                format_func=nav_label,
+        new_page = current
+        for group, pages in NAV_GROUPS.items():
+            st.markdown(
+                f'<div class="gp-nav-group">{group}</div>',
+                unsafe_allow_html=True,
             )
-        st.markdown("</div>", unsafe_allow_html=True)
+            for p in pages:
+                icon = NAV_ICONS.get(p, "")
+                label = PAGE_LABELS.get(p, p)
+                if p == current:
+                    st.markdown(
+                        f'<div class="gp-nav-active">'
+                        f'<span>{icon}</span><span>{label}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    display = f"{icon}  {label}" if icon else label
+                    if st.button(display, key=f"nav_{p}", use_container_width=True):
+                        new_page = p
 
-        st.markdown('<div class="gp-sidebar-footer">', unsafe_allow_html=True)
+        if new_page != current:
+            st.session_state.current_page = new_page
+            st.rerun()
+
+        st.divider()
+
+        project = cfg.get("gcp_project") or "—"
+        wif_ok = status.get("wif", False)
+        auth_icon = "✅" if wif_ok else "⚠️"
+        auth_label = "GitHub connected" if wif_ok else "GitHub not connected"
+        last_svc = cfg.get("last_service") or "—"
+
         st.markdown(
-            f"""
-<dl class="gp-glass gp-env">
-  <dt>Project</dt><dd>{cfg.get("gcp_project", "—")}</dd>
-  <dt>Region</dt><dd>{cfg.get("gcp_region", "—")}</dd>
-  <dt>GitHub</dt><dd>{cfg.get("github_org", "—")}/{cfg.get("github_platform_repo", "—")}</dd>
-  <dt>Auth</dt><dd><span class="gp-pill {wif_cls}">{wif_text}</span></dd>
-  <dt>Service</dt><dd>{last_svc}</dd>
-</dl>
-            """,
+            f'<div class="gp-status-strip">'
+            f'Project: <strong>{project}</strong><br>'
+            f'{auth_icon} {auth_label}<br>'
+            f'Service: <strong>{last_svc}</strong>'
+            f'</div>',
             unsafe_allow_html=True,
         )
-        st.caption("Saved to `.goldenpath-setup.local.json`")
-        st.markdown("</div>", unsafe_allow_html=True)
-    return page
+
+    return current
 
 
 # ── Page: Dashboard ────────────────────────────────────────────────────────────
@@ -1137,108 +1515,143 @@ def render_sidebar() -> str:
 def page_dashboard():
     cfg = st.session_state.config
     refresh = st.session_state.pop("refresh_setup_status", False)
-
     status = compute_setup_status(cfg, refresh=refresh)
     done_count = sum(1 for key, _, _ in SETUP_STEPS if status.get(key))
+    total = len(SETUP_STEPS)
     next_page = next_setup_step(status)
-    pct = int((done_count / len(SETUP_STEPS)) * 100)
 
-    if status["verify"]:
-        callout = (
-            '<div class="gp-glass gp-callout"><strong>Live on Cloud Run</strong>'
-            "<p>Re-verify health or scaffold another service.</p></div>"
+    # ── Hero state ────────────────────────────────────────────────────────────
+    if status.get("verify"):
+        render_page_header(
+            "You're live!",
+            "Your service is running on Google Cloud. Everything is set up.",
         )
-    elif next_page:
-        callout = (
-            f'<div class="gp-glass gp-callout"><strong>Next: {next_page}</strong>'
-            f"<p>{done_count}/{len(SETUP_STEPS)} steps ({pct}%)</p></div>"
-        )
-    else:
-        callout = ""
-
-    render_page_header(
-        "Setup Dashboard",
-        "Track progress, run checks, and jump to the next step.",
-        callout_html=callout,
-    )
-
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-    with m1:
-        st.metric("Done", f"{pct}%")
-    with m2:
-        st.metric("Profile", cfg.get("profile", "—").title())
-    with m3:
-        st.metric("Project", cfg.get("gcp_project", "—"))
-    with m4:
-        st.metric("Region", cfg.get("gcp_region", "—"))
-    with m5:
-        st.metric("Bootstrap", "Ready" if status["bootstrap"] else "Pending")
-    with m6:
-        st.metric("WIF", "Ready" if status["wif"] else "Pending")
-
-    col_check, col_actions, col_health = st.columns([1.35, 0.65, 1], gap="small")
-    half = (len(SETUP_STEPS) + 1) // 2
-
-    with col_check:
-        with section("Checklist"):
-            st.progress(done_count / len(SETUP_STEPS), text=f"{done_count}/{len(SETUP_STEPS)}")
-            s_left, s_right = st.columns(2, gap="small")
-            for i, (key, label, page) in enumerate(SETUP_STEPS):
-                col = s_left if i < half else s_right
-                with col:
-                    if status.get(key):
-                        st.markdown(f":green[✓] **{label}**")
-                    elif next_page == page:
-                        st.markdown(f":blue[→] **{label}**")
-                    else:
-                        st.markdown(f"○ {label}")
-
-    with col_actions:
-        with section("Actions"):
-            if next_page:
-                if st.button(f"→ {next_page}", type="primary", use_container_width=True):
-                    navigate_to(next_page)
-            if st.button("Wizard", use_container_width=True):
-                navigate_to("Guided Wizard")
-            if st.button("Refresh", use_container_width=True):
+        svc = cfg.get("last_service", "")
+        project = cfg.get("gcp_project", "")
+        region = cfg.get("gcp_region", "")
+        url = cloud_run_service_url(project, region, f"{svc}-dev") if svc and project and region else None
+        if url:
+            st.success(f"**Service URL:** [{url}]({url})")
+        else:
+            st.success("All setup steps complete — your service is deployed on Cloud Run.")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button("🏗️ Create another service", type="primary", use_container_width=True):
+                navigate_to("Scaffold")
+        with c2:
+            if st.button("🔍 Verify service health", use_container_width=True):
+                navigate_to("Verify")
+        with c3:
+            if st.button("↻ Refresh status", use_container_width=True):
                 st.session_state.refresh_setup_status = True
                 invalidate_setup_status()
                 st.rerun()
+    elif done_count == 0:
+        render_page_header(
+            "Welcome to Golden Path",
+            "Deploy your first service to Google Cloud in minutes.",
+        )
+        st.info(
+            "Follow the steps below to get from zero to a live service on Google Cloud. "
+            "The Guided Wizard walks you through each step automatically."
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("🧙 Start Guided Wizard", type="primary", use_container_width=True):
+                navigate_to("Guided Wizard")
+        with c2:
+            if st.button("⚙️ Go to Settings first", use_container_width=True):
+                navigate_to("Settings")
+    else:
+        next_label = PAGE_LABELS.get(next_page, next_page) if next_page else "—"
+        render_page_header(
+            "Setup in progress",
+            f"{done_count} of {total} steps complete — keep going!",
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            if next_page and st.button(f"→ Continue: {next_label}", type="primary", use_container_width=True):
+                navigate_to(next_page)
+        with c2:
+            if st.button("🧙 Open Guided Wizard", use_container_width=True):
+                navigate_to("Guided Wizard")
 
-    with col_health:
-        with section("Health checks"):
-            h1, h2, h3 = st.columns(3, gap="small")
-            with h1:
-                if st.button("GCP", key="dash_gcp", use_container_width=True):
-                    with st.spinner("..."):
-                        invalidate_setup_status()
-                        if gcp_project_active(cfg["gcp_project"]):
-                            st.success("Active")
-                        else:
-                            st.warning("Not found")
-            with h2:
-                if st.button("WIF", key="dash_wif", use_container_width=True):
-                    _check_wif_status(cfg)
-            with h3:
-                if st.button("Run", key="dash_run", use_container_width=True):
-                    with st.spinner("..."):
-                        code, out, err = run_cmd(
-                            [
-                                "gcloud",
-                                "run",
-                                "services",
-                                "list",
-                                f"--project={cfg['gcp_project']}",
-                                f"--region={cfg['gcp_region']}",
-                                "--format=table(SERVICE,REGION,URL)",
-                            ]
-                        )
-                    if code == 0 and out:
-                        st.code(out, language="text")
-                    elif code == 0:
-                        st.info("No services yet.")
-                    else:
-                        st.error(err or "gcloud error")
+    st.divider()
+
+    # ── Step cards + Quick checks ─────────────────────────────────────────────
+    col_steps, col_checks = st.columns([1.85, 1], gap="medium")
+
+    with col_steps:
+        st.markdown("#### Setup checklist")
+        for key, label, page in SETUP_STEPS:
+            done = status.get(key, False)
+            is_next = (page == next_page)
+            icon = STEP_ICONS.get(key, "○")
+            desc = STEP_DESCRIPTIONS.get(key, "")
+
+            if done:
+                card_cls = "gp-step-card gp-step-card-done"
+                icon_display = "✅"
+                badge = '<span class="gp-step-badge-done">DONE</span>'
+            elif is_next:
+                card_cls = "gp-step-card gp-step-card-next"
+                icon_display = icon
+                badge = '<span class="gp-step-badge-next">NEXT</span>'
+            else:
+                card_cls = "gp-step-card"
+                icon_display = icon
+                badge = ""
+
+            st.markdown(
+                f'<div class="{card_cls}">'
+                f'<div class="gp-step-icon">{icon_display}</div>'
+                f'<div class="gp-step-body">'
+                f'<h4>{label}&nbsp;{badge}</h4>'
+                f'<p>{desc}</p>'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    with col_checks:
+        st.markdown("#### Quick checks")
+        if st.button("Check Google Cloud connection", use_container_width=True, key="dash_gcp"):
+            with st.spinner("Connecting to Google Cloud..."):
+                invalidate_setup_status()
+                if gcp_project_active(cfg.get("gcp_project", "")):
+                    st.success("Google Cloud project is active")
+                else:
+                    st.warning("Project not found — run Setup first")
+
+        if st.button("Check GitHub deploy auth", use_container_width=True, key="dash_wif"):
+            _check_wif_status(cfg)
+
+        if st.button("List deployed services", use_container_width=True, key="dash_run"):
+            with st.spinner("Fetching services..."):
+                code, out, err = run_cmd([
+                    "gcloud", "run", "services", "list",
+                    f"--project={cfg.get('gcp_project', '')}",
+                    f"--region={cfg.get('gcp_region', '')}",
+                    "--format=table(SERVICE,REGION,URL)",
+                ])
+            if code == 0 and out:
+                st.code(out, language="text")
+            elif code == 0:
+                st.info("No services deployed yet.")
+            else:
+                st.error(err or "Could not connect to Google Cloud")
+
+        if st.button("↻ Refresh all status", use_container_width=True, key="dash_refresh"):
+            st.session_state.refresh_setup_status = True
+            invalidate_setup_status()
+            st.rerun()
+
+        st.divider()
+        st.caption(
+            f"**Project:** {cfg.get('gcp_project', '—')}  \n"
+            f"**Region:** {cfg.get('gcp_region', '—')}  \n"
+            f"**GitHub:** {cfg.get('github_org', '—')}"
+        )
 
 
 def _check_wif_status(cfg: dict):
@@ -1289,8 +1702,8 @@ def _render_tool_grid(required: dict[str, str], optional: list[str]) -> bool:
 def page_prerequisites(show_header: bool = True):
     if show_header:
         render_page_header(
-            "Prerequisites",
-            "Confirm required CLIs and authentication before bootstrapping GCP.",
+            "Check your tools",
+            "Make sure the required command-line tools are installed before you start.",
         )
 
     required = {
@@ -1360,14 +1773,14 @@ def page_prerequisites(show_header: bool = True):
 def page_bootstrap(show_header: bool = True):
     if show_header:
         render_page_header(
-            "Bootstrap",
-            "Create the sandbox project and apply Terraform bootstrap resources.",
+            "Set up Google Cloud",
+            "One-time setup that creates your cloud project and deployment infrastructure.",
         )
     cfg = st.session_state.config
 
     st.info(
-        "Creates the GCP project (if needed) and runs Terraform bootstrap — "
-        "Artifact Registry, WIF pool, service account, GitHub OIDC trust."
+        "This runs once per environment. It creates a secure deployment pipeline "
+        "that lets your services go live on Google Cloud automatically."
     )
 
     col1, col2 = st.columns(2)
@@ -1389,19 +1802,22 @@ def page_bootstrap(show_header: bool = True):
 
     st.divider()
 
-    with st.expander("⚙️ What bootstrap does", expanded=False):
+    with st.expander("What does this do exactly?", expanded=False):
         st.markdown("""
-- Enables required GCP APIs (Cloud Run, Artifact Registry, IAM, etc.)
-- Creates an Artifact Registry repository for Docker images
-- Creates a Workload Identity pool + provider for GitHub Actions OIDC
-- Creates a `github-actions` service account with deploy permissions
-- Runs `terraform init` + `terraform apply` in `platform/bootstrap/`
+**In plain English:** Golden Path sets up a secure pipeline between GitHub and Google Cloud.
+
+After this step:
+- Your Google Cloud project will be ready to host services
+- GitHub Actions will be able to deploy your code automatically on every push
+- Docker images will be stored in a private container registry
+
+Technically: it enables required Google Cloud APIs, creates a container registry, and sets up a secure trust link between GitHub and Google Cloud (called Workload Identity Federation) so no passwords ever need to be stored.
         """)
 
     confirm = st.checkbox(
-        f"I understand this will modify GCP project `{cfg['gcp_project']}`"
+        f"I'm ready — set up Google Cloud project `{cfg['gcp_project']}`"
     )
-    if st.button("🚀 Run Bootstrap", disabled=not confirm):
+    if st.button("☁️ Set up Google Cloud", disabled=not confirm):
         if not require_pwsh("bootstrap"):
             return
 
@@ -1414,7 +1830,7 @@ $ErrorActionPreference = 'Stop'
 . '{ps_escape(REPO_ROOT)}/scripts/setup/modules/Bootstrap.ps1'
 {ps_config_block(cfg)}
 try {{
-  Invoke-GoldenPathBootstrap -RepoRoot '{ps_escape(REPO_ROOT)}' -Config $Config -InvokeExternal {{ param($e,$a,$w) Invoke-External $e $a $w }}
+  Invoke-GoldenPathBootstrap -RepoRoot '{ps_escape(REPO_ROOT)}' -Config $Config -InvokeExternal {{ param([string]$Exe,[string[]]$ArgumentList,[string]$WorkDir='') Invoke-External $Exe $ArgumentList $WorkDir }}
   Write-Host 'BootstrapOk=True'
 }} catch {{
   Write-Host "BootstrapError=$($_.Exception.Message)"
@@ -1430,7 +1846,7 @@ try {{
             status.update(label="Bootstrap complete!", state="complete")
 
         invalidate_setup_status()
-        st.success("Bootstrap complete — go to WIF Secrets to get your GitHub deploy credentials.")
+        st.success("Google Cloud is set up! Next: **Connect GitHub to Google Cloud** to enable automatic deploys.")
 
 
 # ── Page: WIF Secrets ─────────────────────────────────────────────────────────
@@ -1439,14 +1855,15 @@ try {{
 def page_wif_secrets(show_header: bool = True):
     if show_header:
         render_page_header(
-            "WIF Secrets",
-            "Workload Identity Federation credentials for GitHub Actions deploys.",
+            "Connect GitHub to Google Cloud",
+            "Get the credentials that let GitHub deploy your services automatically.",
         )
     cfg = st.session_state.config
 
     st.info(
-        "Workload Identity Federation lets GitHub Actions deploy to Cloud Run "
-        "without service account keys. Add these two secrets to your GitHub repos."
+        "After this step, GitHub Actions can deploy your code to Google Cloud automatically — "
+        "no passwords or API keys stored anywhere. "
+        "You'll copy two values and add them as GitHub repository secrets."
     )
 
     if st.button("🔍 Look up WIF credentials"):
@@ -1580,115 +1997,454 @@ def _get_wif_credentials(project_id: str) -> dict | None:
 # ── Page: Scaffold ────────────────────────────────────────────────────────────
 
 
+_SCAFFOLD_STEPS = ["Template & name", "Runtime & mode", "Data stores", "Environments & review"]
+
+
+def _scaffold_draft() -> dict:
+    cfg = st.session_state.config
+    return st.session_state.setdefault(
+        "scaffold_draft",
+        {
+            "service_name": "",
+            "template": "nextjs",
+            "runtime": "",
+            "deployment_mode": "",
+            "stores": {},  # {store_id: subconfig dict}
+            "environments": ["dev", "prod"],
+            "output_dir": str(DEFAULT_SCAFFOLD_OUTPUT),
+            "project": cfg.get("gcp_dev_project", ""),
+        },
+    )
+
+
+def _vpc_network() -> str | None:
+    cfg = st.session_state.config
+    return cfg.get("gcp_vpc_network") or wd.platform_default("GCP_VPC_NETWORK", REPO_ROOT) or None
+
+
+def _draft_to_config(d: dict) -> "sc.ServiceConfig":
+    stores = [sc.DataStoreSpec(sid, dict(conf)) for sid, conf in d.get("stores", {}).items()]
+    return sc.ServiceConfig(
+        service_name=d.get("service_name", ""),
+        template=d.get("template", "nextjs"),
+        runtime=d.get("runtime", ""),
+        deployment_mode=d.get("deployment_mode", ""),
+        data_stores=stores,
+        environments=list(d.get("environments", [])),
+        region=st.session_state.config.get("gcp_region", ""),
+    )
+
+
+def _iam_report_for(d: dict) -> dict:
+    """Non-blocking IAM report: only includes stores we could actually verify."""
+    probe = st.session_state.get("scaffold_iam_probe", {})
+    report = {}
+    for sid, entry in probe.items():
+        if not entry.get("unknown") and entry.get("missing"):
+            report[sid] = {"missing": entry["missing"]}
+    return report
+
+
 def page_scaffold(show_header: bool = True):
     if show_header:
         render_page_header(
-            "Scaffold",
-            "Generate a new service from a Golden Path template outside the platform repo.",
+            "Create a new service",
+            "Compose a service from a template, runtime, deployment mode, and managed "
+            "data stores — Golden Path validates every choice and generates deploy-ready "
+            "code plus Terraform.",
         )
     cfg = st.session_state.config
+    d = _scaffold_draft()
+    step = st.session_state.get("scaffold_step", 0)
 
-    st.info(
-        "Creates a new service directory from a template **outside** the platform repo "
-        f"(default: `{DEFAULT_SCAFFOLD_OUTPUT}/<service-name>`). "
-        "Ready to publish to GitHub and deploy to Cloud Run."
-    )
+    st.markdown(_wizard_stepper_html(_SCAFFOLD_STEPS, step), unsafe_allow_html=True)
 
-    # Load template catalog if available
-    templates = _load_templates()
-    if templates:
-        st.subheader("Available templates")
-        tbl = []
-        for name, meta in templates.items():
-            tbl.append({
-                "Template": name,
-                "Runtime": meta.get("app_runtime", ""),
-                "Port": meta.get("container_port", ""),
-                "Health": meta.get("health_check_path", "/health"),
-                "Default": "✓" if meta.get("default") else "",
-            })
-        st.dataframe(tbl, use_container_width=True, hide_index=True)
+    if step == 0:
+        _scaffold_step_template(d)
+    elif step == 1:
+        _scaffold_step_runtime_mode(d)
+    elif step == 2:
+        _scaffold_step_data_stores(d)
     else:
-        st.caption(f"Templates: {', '.join(DEFAULT_TEMPLATES)}")
+        _scaffold_step_review(d, cfg)
 
+    _scaffold_nav(d, step)
+
+    if step == 0:
+        st.divider()
+        _render_custom_template_expander(cfg)
+
+
+def _scaffold_nav(d: dict, step: int) -> None:
     st.divider()
+    cols = st.columns([1, 4, 1])
+    with cols[0]:
+        if step > 0 and st.button("← Back", use_container_width=True, key="scaffold_back"):
+            st.session_state.scaffold_step = step - 1
+            st.rerun()
+    with cols[1]:
+        st.caption(f"Step {step + 1} of {len(_SCAFFOLD_STEPS)} · {_SCAFFOLD_STEPS[step]}")
+    with cols[2]:
+        if step < len(_SCAFFOLD_STEPS) - 1:
+            blocked = _scaffold_step_blocked(d, step)
+            if st.button("Next →", use_container_width=True, disabled=blocked, key="scaffold_next"):
+                st.session_state.scaffold_step = step + 1
+                st.rerun()
 
-    col1, col2 = st.columns(2)
-    with col1:
-        service_name = st.text_input(
-            "Service name",
-            placeholder="demo-streamlit",
-            help="3–40 chars, lowercase kebab-case, e.g. my-streamlit-app",
+
+def _scaffold_step_blocked(d: dict, step: int) -> bool:
+    if step == 0:
+        return bool(
+            not d["service_name"]
+            or validate_service_name(d["service_name"])
+            or not d["output_dir"]
         )
-        name_err = validate_service_name(service_name) if service_name else None
+    if step == 1:
+        return not (d["runtime"] and d["deployment_mode"])
+    return False
+
+
+def _scaffold_step_template(d: dict) -> None:
+    templates = _load_templates() or {t: {} for t in DEFAULT_TEMPLATES}
+    names = list(templates.keys())
+    with section("Choose a template"):
+        idx = names.index(d["template"]) if d["template"] in names else 0
+        template = st.selectbox(
+            "Template",
+            names,
+            index=idx,
+            help="Not sure? Next.js is the default for most web apps.",
+        )
+        if template != d["template"]:
+            # Reset downstream choices when the template changes.
+            d.update({"template": template, "runtime": "", "deployment_mode": "", "stores": {}})
+        caps = sc.template_capabilities(template, templates)
+        st.caption(
+            f"**{templates.get(template, {}).get('description', template)}** · "
+            f"runtimes: {', '.join(caps['runtimes'])} · "
+            f"modes: {', '.join(caps['deployment_modes'])}"
+        )
+
+    with section("Name & location"):
+        name = st.text_input(
+            "Service name",
+            value=d["service_name"],
+            placeholder="my-service",
+            help="3–40 characters, lowercase letters, numbers, and hyphens.",
+        )
+        d["service_name"] = name
+        name_err = validate_service_name(name) if name else None
         if name_err:
             st.error(name_err)
-    with col2:
-        template_opts = list(templates.keys()) if templates else DEFAULT_TEMPLATES
-        template = st.selectbox("Template", template_opts)
 
-    output_dir_str = st.text_input(
-        "Output directory (parent folder for the service)",
-        value=str(DEFAULT_SCAFFOLD_OUTPUT),
-        help="Default is the parent of goldenpath — keeps services out of the platform repo.",
-    )
-    output_dir = Path(output_dir_str).expanduser() if output_dir_str else None
-    output_warn = scaffold_output_warning(output_dir) if output_dir else None
-    if output_warn:
-        st.warning(output_warn)
+        out = st.text_input(
+            "Where to create the service (parent folder)",
+            value=d["output_dir"],
+            help="A new folder is created here with your service name (kept outside this platform folder).",
+        )
+        d["output_dir"] = out
+        output_dir = Path(out).expanduser() if out else None
+        warn = scaffold_output_warning(output_dir) if output_dir else None
+        if warn:
+            st.warning(warn)
+        if output_dir and name:
+            target = output_dir / name
+            if target.exists() and list(target.iterdir()):
+                st.warning(f"A non-empty folder `{name}` already exists there.")
 
-    target_dir = (output_dir / service_name) if output_dir and service_name else None
-    if target_dir and target_dir.exists():
-        children = list(target_dir.iterdir())
-        if children:
-            st.warning(f"⚠️ Folder already exists and is not empty: `{target_dir}`")
+        project = st.text_input(
+            "Google Cloud project (leave blank to use your saved project)",
+            value=d.get("project", ""),
+            key="scaffold_project",
+            help="The GCP project where this service (and any data stores) will be created.",
+        )
+        d["project"] = project
+        perr = validate_project_id(project) if project else None
+        if perr:
+            st.error(perr)
 
-    project_override = st.text_input(
-        "GCP project (override)",
-        value=cfg.get("gcp_dev_project", ""),
-        key="scaffold_project",
-    )
-    override_err = validate_project_id(project_override) if project_override else None
-    if override_err:
-        st.error(override_err)
 
-    scaffold_disabled = bool(
-        name_err or override_err or not service_name or output_warn or not output_dir_str
-    )
-    if st.button("🏗️ Scaffold", disabled=scaffold_disabled):
-        if target_dir and target_dir.exists() and list(target_dir.iterdir()):
-            st.error(f"Folder `{target_dir}` already exists and is not empty.")
+def _scaffold_step_runtime_mode(d: dict) -> None:
+    templates = _load_templates()
+    with section("Runtime"):
+        runtime_opts = [o["value"] for o in sc.runtime_options(d["template"], templates)]
+        if d["runtime"] not in runtime_opts:
+            d["runtime"] = runtime_opts[0]
+        d["runtime"] = st.radio(
+            "Runtime",
+            runtime_opts,
+            index=runtime_opts.index(d["runtime"]),
+            horizontal=True,
+            help="Docker is available as a packaging option for server templates.",
+        )
+
+    with section("Deployment mode"):
+        mode_opts = sc.mode_options(d["template"], templates)
+        enabled = [o for o in mode_opts if o["enabled"]]
+        disabled = [o for o in mode_opts if not o["enabled"]]
+        values = [o["value"] for o in enabled]
+        labels = {o["value"]: o["label"] for o in enabled}
+        if d["deployment_mode"] not in values:
+            d["deployment_mode"] = values[0]
+        d["deployment_mode"] = st.radio(
+            "How is this service delivered?",
+            values,
+            index=values.index(d["deployment_mode"]),
+            format_func=lambda v: labels[v],
+        )
+        for o in disabled:
+            st.caption(f"🔒 {o['label']} — {o['reason']}")
+        if d["deployment_mode"] == sc.MODE_STATIC:
+            st.info(
+                "Static/SPA services are client-only and cannot hold a database "
+                "connection directly. A companion BFF service to own the DB is coming "
+                "in a later release."
+            )
+
+
+def _scaffold_step_data_stores(d: dict) -> None:
+    mode = d["deployment_mode"]
+    if mode == sc.MODE_STATIC:
+        with section("Data stores"):
+            st.info("Not available for static/SPA services (see the previous step).")
+            for o in sc.data_store_options(mode):
+                st.caption(f"🔒 {o['label']} — {o['reason']}")
+        return
+
+    project = d.get("project") or st.session_state.config.get("gcp_dev_project", "")
+    with section("Attach managed data stores"):
+        st.caption(
+            "Options reflect both template capability and your real IAM permissions. "
+            "Use *Check my permissions* to gate on live access."
+        )
+        if st.button("🔐 Check my permissions", key="scaffold_iam_check"):
+            enabled_ids = [
+                sid for sid, s in sc.DATA_STORES.items() if s.get("enabled")
+            ]
+            ip_mode = "private" if any(
+                c.get("ip_mode") == "private" for c in d["stores"].values()
+            ) else "public"
+            with st.spinner("Checking IAM permissions on the target project…"):
+                st.session_state["scaffold_iam_probe"] = ops.probe_data_store_permissions(
+                    project, enabled_ids, ip_mode
+                )
+
+        iam_report = _iam_report_for(d)
+        for o in sc.data_store_options(mode, iam_report, _vpc_network()):
+            sid = o["value"]
+            selected_now = sid in d["stores"]
+            if not o["enabled"]:
+                st.checkbox(o["label"], value=False, disabled=True, key=f"ds_{sid}")
+                st.caption(f"🔒 {o['reason']}")
+                continue
+            checked = st.checkbox(o["label"], value=selected_now, key=f"ds_{sid}")
+            if checked and not selected_now:
+                d["stores"][sid] = _default_store_config(sid)
+            elif not checked and selected_now:
+                d["stores"].pop(sid, None)
+
+        probe = st.session_state.get("scaffold_iam_probe", {})
+        for sid, entry in probe.items():
+            if entry.get("unknown"):
+                st.caption(f"⚠️ Could not verify permissions for {sc.DATA_STORES[sid]['display_name']}.")
+
+    for sid in list(d["stores"].keys()):
+        if sid == "cloud_sql":
+            _cloud_sql_subconfig(d)
+
+
+def _default_store_config(sid: str) -> dict:
+    if sid == "cloud_sql":
+        return {
+            "engine": "postgresql",
+            "version": "POSTGRES_16",
+            "tier": "db-f1-micro",
+            "high_availability": False,
+            "ip_mode": "public",
+            "database_name": "appdb",
+        }
+    return {}
+
+
+def _cloud_sql_subconfig(d: dict) -> None:
+    store = sc.DATA_STORES["cloud_sql"]
+    conf = d["stores"]["cloud_sql"]
+    with section("Cloud SQL configuration"):
+        c1, c2 = st.columns(2)
+        with c1:
+            engines = [e for e in store["engines"] if e.get("enabled")]
+            conf["engine"] = st.selectbox(
+                "Engine", [e["value"] for e in engines],
+                format_func=lambda v: next(e["label"] for e in engines if e["value"] == v),
+            )
+            versions = next(e["versions"] for e in engines if e["value"] == conf["engine"])
+            if conf.get("version") not in versions:
+                conf["version"] = versions[0]
+            conf["version"] = st.selectbox("Version", versions, index=versions.index(conf["version"]))
+            conf["database_name"] = st.text_input("Database name", value=conf.get("database_name", "appdb"))
+        with c2:
+            tiers = store["tiers"]
+            if conf.get("tier") not in tiers:
+                conf["tier"] = store["default_tier"]
+            conf["tier"] = st.selectbox("Tier", tiers, index=tiers.index(conf["tier"]))
+            conf["high_availability"] = st.checkbox(
+                "High availability (REGIONAL)", value=conf.get("high_availability", False)
+            )
+            vpc = _vpc_network()
+            ip_modes = store["ip_modes"]
+            disabled_private = not vpc
+            ip_choice = st.radio(
+                "IP mode", ip_modes,
+                index=ip_modes.index(conf.get("ip_mode", "public")),
+                horizontal=True,
+            )
+            if ip_choice == "private" and disabled_private:
+                st.warning(
+                    "Private IP needs a VPC network (set GCP_VPC_NETWORK in "
+                    "config/enterprise.env). Falling back to public IP."
+                )
+                ip_choice = "public"
+            conf["ip_mode"] = ip_choice
+        st.caption(
+            "Uses IAM database authentication — the runtime service account connects "
+            "with an OAuth token; no password is created or stored."
+        )
+
+
+def _scaffold_step_review(d: dict, cfg: dict) -> None:
+    svc = _draft_to_config(d)
+    result = sc.validate_config(svc, vpc_network=_vpc_network(), iam_report=_iam_report_for(d))
+
+    with section("Review"):
+        st.markdown(
+            f"- **Service**: `{d['service_name'] or '—'}`\n"
+            f"- **Template**: {d['template']} · **runtime**: {d['runtime']} · "
+            f"**mode**: {d['deployment_mode']}\n"
+            f"- **Data stores**: "
+            + (", ".join(f"{sid} ({c.get('engine','')}/{c.get('ip_mode','')})"
+                         for sid, c in d["stores"].items()) or "none")
+        )
+        d["environments"] = st.multiselect(
+            "Environments", ["dev", "prod"], default=d.get("environments", ["dev", "prod"])
+        )
+
+    if result.errors:
+        with section("Fix before creating"):
+            for issue in result.errors:
+                icon = {"capability": "🚫", "permission": "🔒", "config": "⚠️"}.get(issue.gate, "•")
+                st.error(f"{icon} **{issue.field}** — {issue.message}")
+
+    create_disabled = not result.ok
+    if st.button("Create service", type="primary", disabled=create_disabled, key="scaffold_create"):
+        _do_scaffold(d, cfg, svc)
+
+
+def _do_scaffold(d: dict, cfg: dict, svc: "sc.ServiceConfig") -> None:
+    output_dir = Path(d["output_dir"]).expanduser()
+    project = d.get("project") or cfg.get("gcp_dev_project", "")
+    scaffold_cfg = {
+        **cfg,
+        "gcp_dev_project": project,
+        "gcp_prod_project": project,
+        "gcp_project": project,
+    }
+    with st.spinner(f"Creating `{svc.service_name}` from the {svc.template} template…"):
+        try:
+            result = ops.scaffold(
+                svc.service_name, svc.template, output_dir, scaffold_cfg, service_config=svc
+            )
+        except Exception as exc:
+            st.error(f"Could not create service: {exc}")
             return
 
-        project_to_use = project_override or cfg["gcp_dev_project"]
-        scaffold_cfg = {
-            **cfg,
-            "gcp_dev_project": project_to_use,
-            "gcp_prod_project": project_to_use,
-            "gcp_project": project_to_use,
-        }
-        if target_dir:
-            target_dir.mkdir(parents=True, exist_ok=True)
-        with st.spinner(f"Scaffolding `{service_name}` ({template})..."):
-            try:
-                result = ops.scaffold(
-                    service_name,
-                    template,
-                    output_dir,
-                    scaffold_cfg,
-                )
-            except Exception as exc:
-                st.error(f"Scaffold failed: {exc}")
-                return
+    cfg["last_service"] = svc.service_name
+    cfg["last_service_dir"] = str(result.service_dir)
+    save_config(cfg)
+    invalidate_setup_status()
+    st.success(f"Service `{svc.service_name}` created at `{result.service_dir}`")
+    st.caption(f"Health check path: `{result.health_check_path}`")
+    for note in result.data_store_notes or []:
+        st.caption(f"• generated {note}")
+    st.info("Ready to go! Head to **Deploy your service** to push it to GitHub and deploy.")
 
-        svc_dir = result.service_dir
-        cfg["last_service"] = service_name
-        cfg["last_service_dir"] = str(svc_dir)
-        save_config(cfg)
-        invalidate_setup_status()
-        st.success(f"Scaffolded `{service_name}` → `{svc_dir}`")
-        st.caption(f"Health path: `{result.health_check_path}`")
-        st.info("Next: go to **Publish** to push to GitHub and deploy.")
+
+def _render_custom_template_expander(cfg: dict) -> None:
+    with st.expander("My template isn't listed — create a custom one"):
+        st.markdown(
+            "Don't see your stack above? Describe it below and Golden Path will generate "
+            "a baseline project with the right Dockerfile, Cloud Run infrastructure, and "
+            "GitHub Actions deploy workflow."
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            custom_name = st.text_input(
+                "Service name",
+                key="custom_svc_name",
+                placeholder="my-custom-service",
+                help="3–40 characters, lowercase kebab-case",
+            )
+            custom_name_err = validate_service_name(custom_name) if custom_name else None
+            if custom_name_err:
+                st.error(custom_name_err)
+        with c2:
+            custom_runtime = st.radio(
+                "Runtime",
+                ["python", "node", "docker"],
+                key="custom_runtime",
+                help="Choose the language/runtime your service uses.",
+                horizontal=True,
+            )
+        c3, c4 = st.columns(2)
+        with c3:
+            custom_port = st.number_input(
+                "Port your app listens on",
+                min_value=1, max_value=65535, value=8080, step=1,
+                key="custom_port",
+            )
+        with c4:
+            custom_health = st.text_input(
+                "Health check path",
+                value="/health",
+                key="custom_health",
+                help="Golden Path uses this URL to confirm your service is running.",
+            )
+
+        custom_output_str = st.text_input(
+            "Where to create the service (parent folder)",
+            value=str(DEFAULT_SCAFFOLD_OUTPUT),
+            key="custom_output_dir",
+        )
+        custom_output = Path(custom_output_str).expanduser() if custom_output_str else None
+
+        gen_disabled = bool(custom_name_err or not custom_name or not custom_output_str)
+        if st.button("Generate custom template", disabled=gen_disabled, key="gen_custom"):
+            with st.spinner(f"Generating `{custom_name}` ({custom_runtime}, port {custom_port})..."):
+                try:
+                    project_to_use = cfg.get("gcp_dev_project", "")
+                    gen_cfg = {
+                        **cfg,
+                        "gcp_dev_project": project_to_use,
+                        "gcp_prod_project": project_to_use,
+                        "gcp_project": project_to_use,
+                    }
+                    result = ops.generate_custom_template(
+                        name=custom_name,
+                        runtime=custom_runtime,
+                        port=int(custom_port),
+                        health_path=custom_health or "/health",
+                        output_dir=custom_output,
+                        cfg=gen_cfg,
+                    )
+                except Exception as exc:
+                    st.error(f"Could not generate template: {exc}")
+                else:
+                    cfg["last_service"] = custom_name
+                    cfg["last_service_dir"] = str(result.service_dir)
+                    save_config(cfg)
+                    invalidate_setup_status()
+                    st.success(f"Custom service `{custom_name}` created at `{result.service_dir}`")
+                    st.caption(f"Based on the **{result.template}** template · health: `{result.health_check_path}`")
+                    st.info("Next: head to **Deploy your service** to push to GitHub and deploy.")
 
 
 def _load_templates() -> dict:
@@ -1713,14 +2469,14 @@ def _load_templates() -> dict:
 def page_publish(show_header: bool = True):
     if show_header:
         render_page_header(
-            "Publish",
-            "Create the GitHub repo, set secrets, push code, and watch the deploy workflow.",
+            "Deploy your service",
+            "Push your service to GitHub and watch it go live on Google Cloud.",
         )
     cfg = st.session_state.config
 
     st.info(
-        "Creates the GitHub repo, sets WIF secrets, adds WIF trust policy, "
-        "pushes code, and watches the deploy workflow."
+        "This creates a GitHub repository for your service, sets up the deploy pipeline, "
+        "and pushes your code. The first deploy happens automatically."
     )
 
     default_path = service_dir_for(cfg)
@@ -1759,12 +2515,15 @@ def page_publish(show_header: bool = True):
 
         svc_path = Path(service_dir).resolve()
         svc_name = svc_path.name
-        log_lines: list[str] = []
 
-        def on_step(msg: str) -> None:
-            log_lines.append(msg)
+        with st.status("Publishing your service — this takes a few minutes...", expanded=True) as pub_status:
+            log_lines: list[str] = []
+            log_box = st.empty()
 
-        with st.spinner("Publishing (this may take a few minutes)..."):
+            def on_step(msg: str) -> None:
+                log_lines.append(msg)
+                log_box.code("\n".join(log_lines), language="text")
+
             try:
                 pub = ops.publish(
                     svc_path,
@@ -1774,14 +2533,11 @@ def page_publish(show_header: bool = True):
                     watch_deploy=True,
                     on_step=on_step,
                 )
+                pub_status.update(label="Published!", state="complete")
             except Exception as exc:
-                if log_lines:
-                    st.code("\n".join(log_lines), language="text")
+                pub_status.update(label=f"Publish failed: {exc}", state="error")
                 st.error(f"Publish failed: {exc}")
                 return
-
-        if log_lines:
-            st.code("\n".join(log_lines), language="text")
 
         cfg["last_service"] = svc_name
         cfg["last_service_dir"] = str(svc_path)
@@ -1837,7 +2593,7 @@ $ErrorActionPreference = 'Continue'
 {ps_config_block(verify_cfg)}
 $verify = Invoke-GoldenPathVerifyDeployment -CloudRunService '{ps_escape(service_name)}' `
   -ServiceDir '{ps_escape(service_dir_arg)}' -RepoRoot '{ps_escape(REPO_ROOT)}' -Config $Config `
-  -InvokeExternal {{ param($e,$a,$w) Invoke-External $e $a $w }}
+  -InvokeExternal {{ param([string]$Exe,[string[]]$ArgumentList,[string]$WorkDir='') Invoke-External $Exe $ArgumentList $WorkDir }}
 Write-Host "Url=$($verify.Url)"
 Write-Host "HealthOk=$($verify.HealthOk)"
 Write-Host "HealthPath=$($verify.HealthPath)"
@@ -1993,69 +2749,81 @@ def page_edit_settings(show_header: bool = True):
     if show_header:
         render_page_header(
             "Settings",
-            "Choose your sandbox profile, GCP project, region, and GitHub settings.",
+            "Configure your Google Cloud project, region, and GitHub organization.",
         )
     cfg = st.session_state.config
 
     setup_modes = [
-        "Sandbox — defaults from config/enterprise.env",
-        "New self-contained sandbox — pick a project name, tear down later",
-        "Custom existing project — use a GCP project you already have",
+        "Use a pre-configured sandbox project",
+        "Create a new sandbox project with a custom name",
+        "Use an existing Google Cloud project I already have",
     ]
     saved_profile = cfg.get("profile", "sandbox")
     if saved_profile in ("teardown", "enterprise"):
         saved_profile = "sandbox"
     default_mode = 0 if saved_profile == "sandbox" else 2
-    setup_mode = st.selectbox("Setup mode", setup_modes, index=default_mode)
+    setup_mode = st.radio(
+        "Which Google Cloud project do you want to use?",
+        setup_modes,
+        index=default_mode,
+        help="If you're not sure, choose the first option.",
+    )
 
     if setup_mode == setup_modes[0]:
         profile = "sandbox"
-        st.subheader("Sandbox defaults")
-        st.caption("Values from `config/enterprise.env` — confirm or change project ID.")
+        st.caption("Uses defaults from your organization's configuration.")
         suggested_project = default_config()["gcp_project"]
     elif setup_mode == setup_modes[1]:
         profile = "sandbox"
-        st.subheader("New sandbox project")
-        st.caption("Pick a globally unique project ID — tear down anytime via menu 13.")
+        st.caption("You'll enter a unique project name below. You can tear it down later.")
         suggested_project = f"gp-sandbox-{datetime.now().strftime('%Y%m%d')}"
     else:
         profile = "custom"
-        st.subheader("Custom / existing project")
-        st.caption("Use a GCP project that already exists. Not marked as disposable.")
+        st.caption("Use a Google Cloud project that already exists.")
         suggested_project = cfg.get("gcp_project", "")
 
     col1, col2 = st.columns(2)
     with col1:
         gcp_project = st.text_input(
-            "GCP project ID",
+            "Google Cloud project ID",
             value=cfg.get("gcp_project", suggested_project),
+            help="Lowercase letters, numbers, and hyphens. Must be globally unique in Google Cloud.",
         )
         pid_err = validate_project_id(gcp_project) if gcp_project else "Required"
         if pid_err:
             st.error(pid_err)
 
         display_name = st.text_input(
-            "Project display name",
+            "Project display name (optional)",
             value=cfg.get("project_display_name", ""),
+            help="A friendly name shown in the Google Cloud console.",
         )
         region_options = ["us-central1", "us-east1", "us-west1", "europe-west1", "asia-east1"]
         current_region = cfg.get("gcp_region") or default_config().get("gcp_region", "")
         if current_region and current_region not in region_options:
             region_options = [current_region, *region_options]
         gcp_region = st.selectbox(
-            "GCP region",
+            "Google Cloud region",
             region_options,
             index=region_options.index(current_region) if current_region in region_options else 0,
+            help="The geographic region where your services will run. us-central1 is a good default.",
         )
 
     with col2:
-        github_org = st.text_input("GitHub org / username", value=cfg.get("github_org", ""))
+        github_org = st.text_input(
+            "GitHub organization or username",
+            value=cfg.get("github_org", ""),
+            help="Your GitHub org or personal username (e.g. my-company or johndoe).",
+        )
         github_platform_repo = st.text_input(
-            "Platform repo name", value=cfg.get("github_platform_repo", "")
+            "Platform repository name",
+            value=cfg.get("github_platform_repo", ""),
+            help="The name of the Golden Path platform repository on GitHub.",
         )
         goldenpath_version = st.text_input(
             "Golden Path version",
             value=cfg.get("goldenpath_version") or default_config().get("goldenpath_version", ""),
+            help="Leave as-is unless your organization has a specific version requirement.",
         )
         sandbox_disposable = profile == "sandbox"
 
@@ -2154,7 +2922,7 @@ Protected projects (`YOUR_BILLING_ANCHOR_PROJECT`, etc.) are blocked.
 $ErrorActionPreference = 'Stop'
 . '{ps_escape(REPO_ROOT)}/scripts/setup/modules/Bootstrap.ps1'
 try {{
-  Invoke-GoldenPathTeardown -RepoRoot '{ps_escape(REPO_ROOT)}' -DeleteProject:{delete_flag} -InvokeExternal {{ param($e,$a,$w) Invoke-External $e $a $w }}
+  Invoke-GoldenPathTeardown -RepoRoot '{ps_escape(REPO_ROOT)}' -DeleteProject:{delete_flag} -InvokeExternal {{ param([string]$Exe,[string[]]$ArgumentList,[string]$WorkDir='') Invoke-External $Exe $ArgumentList $WorkDir }}
   Write-Host 'TeardownOk=True'
 }} catch {{
   Write-Host "TeardownError=$($_.Exception.Message)"
@@ -2202,18 +2970,45 @@ def page_fresh_start():
 
 # ── Page: Full Wizard ─────────────────────────────────────────────────────────
 
+_WIZARD_PLAIN_LABELS = {
+    "Settings": "Settings",
+    "Prerequisites": "Check tools",
+    "Bootstrap": "Google Cloud",
+    "WIF Secrets": "GitHub link",
+    "Scaffold": "Create service",
+    "Publish": "Deploy",
+    "MCP Config": "Claude (opt.)",
+}
+
+
+def _wizard_stepper_html(wizard_steps: list, current: int) -> str:
+    parts = []
+    for i, step in enumerate(wizard_steps):
+        label = _WIZARD_PLAIN_LABELS.get(step, step)
+        if i < current:
+            cls = "gp-wizard-step gp-wiz-done"
+            bubble = "✓"
+        elif i == current:
+            cls = "gp-wizard-step gp-wiz-current"
+            bubble = str(i + 1)
+        else:
+            cls = "gp-wizard-step"
+            bubble = str(i + 1)
+        parts.append(
+            f'<div class="{cls}">'
+            f'<div class="gp-wiz-bubble">{bubble}</div>'
+            f'<div class="gp-wiz-label">{label}</div>'
+            f'</div>'
+        )
+    return f'<div class="gp-wizard-stepper">{"".join(parts)}</div>'
+
 
 def page_full_wizard():
     render_page_header(
         "Guided Wizard",
-        "Step-by-step setup from prerequisites to a live Cloud Run service.",
+        "Walk through each step in order — from settings to a live service.",
     )
     cfg = st.session_state.config
-
-    st.info(
-        "Step-by-step setup — from prerequisites to a live Cloud Run service. "
-        "Complete each step before moving to the next."
-    )
 
     wizard_steps = [
         "Settings",
@@ -2227,88 +3022,94 @@ def page_full_wizard():
     wizard_step = st.session_state.get("wizard_step", 0)
     total = len(wizard_steps)
 
-    st.progress((wizard_step + 1) / total)
+    # Visual step indicator
+    st.markdown(_wizard_stepper_html(wizard_steps, wizard_step), unsafe_allow_html=True)
+
+    # Back / step counter / Skip controls
     nav_cols = st.columns([1, 4, 1])
     with nav_cols[0]:
-        if wizard_step > 0 and st.button("Back", use_container_width=True):
+        if wizard_step > 0 and st.button("← Back", use_container_width=True):
             st.session_state.wizard_step = wizard_step - 1
             st.rerun()
     with nav_cols[1]:
+        plain = _WIZARD_PLAIN_LABELS.get(wizard_steps[wizard_step], wizard_steps[wizard_step])
         st.markdown(
-            f"<div style='text-align:center;color:#64748b;font-size:0.9rem;font-weight:600;"
-            f"padding-top:0.35rem'>Step {wizard_step + 1} of {total} — "
-            f"{wizard_steps[wizard_step]}</div>",
+            f"<div style='text-align:center;color:#64748b;font-size:0.85rem;font-weight:600;"
+            f"padding-top:0.35rem'>Step {wizard_step + 1} of {total} — {plain}</div>",
             unsafe_allow_html=True,
         )
     with nav_cols[2]:
-        if wizard_step < total - 1 and st.button("Skip", use_container_width=True):
+        if wizard_step < total - 1 and st.button("Skip →", use_container_width=True):
             st.session_state.wizard_step = wizard_step + 1
             st.rerun()
 
     st.divider()
 
     if wizard_step == 0:
-        st.markdown("#### Step 1 — Choose your profile")
+        st.markdown("#### 1. Configure your project")
         page_edit_settings(show_header=False)
-        if st.button("Next →", key="wiz_next_0"):
+        if st.button("Next →", key="wiz_next_0", type="primary"):
             st.session_state.wizard_step = 1
             st.rerun()
 
     elif wizard_step == 1:
-        st.markdown("#### Step 2 — Check tools and login")
+        st.markdown("#### 2. Check your tools are installed")
         page_prerequisites(show_header=False)
         st.divider()
-        if st.button("Next →", key="wiz_next_1"):
+        if st.button("Next →", key="wiz_next_1", type="primary"):
             st.session_state.wizard_step = 2
             st.rerun()
 
     elif wizard_step == 2:
-        st.markdown("#### Step 3 — Bootstrap GCP")
+        st.markdown("#### 3. Set up Google Cloud")
         page_bootstrap(show_header=False)
         st.divider()
-        if st.button("Next →", key="wiz_next_2"):
+        if st.button("Next →", key="wiz_next_2", type="primary"):
             st.session_state.wizard_step = 3
             st.rerun()
 
     elif wizard_step == 3:
-        st.markdown("#### Step 4 — GitHub deploy credentials")
+        st.markdown("#### 4. Connect GitHub to Google Cloud")
         page_wif_secrets(show_header=False)
         st.divider()
-        if st.button("Next →", key="wiz_next_3"):
+        if st.button("Next →", key="wiz_next_3", type="primary"):
             st.session_state.wizard_step = 4
             st.rerun()
 
     elif wizard_step == 4:
-        st.markdown("#### Step 5 — Scaffold a service")
+        st.markdown("#### 5. Create your service")
         page_scaffold(show_header=False)
         st.divider()
-        if st.button("Next →", key="wiz_next_4"):
+        if st.button("Next →", key="wiz_next_4", type="primary"):
             st.session_state.wizard_step = 5
             st.rerun()
 
     elif wizard_step == 5:
-        st.markdown("#### Step 6 — Publish service")
+        st.markdown("#### 6. Deploy your service")
         page_publish(show_header=False)
         st.divider()
-        if st.button("Next →", key="wiz_next_5"):
+        if st.button("Next →", key="wiz_next_5", type="primary"):
             st.session_state.wizard_step = 6
             st.rerun()
 
     elif wizard_step == 6:
-        st.markdown("#### Step 7 — MCP for Claude (optional)")
+        st.markdown("#### 7. Connect Claude (optional)")
         page_mcp(show_header=False)
         st.divider()
-        st.success("Wizard complete!")
+        st.success("🎉 Wizard complete! Your service is set up.")
         st.markdown(
-            """
-**What's next:**
-- **Verify** — confirm your Cloud Run service is live
-- **Dashboard** — track progress and run health checks
-            """
+            "**What's next:**\n"
+            "- Go to **Verify** to confirm your service is live\n"
+            "- Return to **Dashboard** to see your progress overview"
         )
-        if st.button("Restart wizard"):
-            st.session_state.wizard_step = 0
-            st.rerun()
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("🔍 Verify my service", type="primary", use_container_width=True):
+                navigate_to("Verify")
+        with c2:
+            if st.button("↺ Restart wizard", use_container_width=True):
+                st.session_state.wizard_step = 0
+                st.rerun()
 
 
 # ── App entrypoint ─────────────────────────────────────────────────────────────
@@ -2329,6 +3130,8 @@ def main():
         st.session_state.wizard_step = 0
     if "prereqs_ok" not in st.session_state:
         st.session_state.prereqs_ok = False
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "Dashboard"
 
     st.session_state.config = load_config()
     page = render_sidebar()
