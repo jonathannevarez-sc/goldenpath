@@ -1,6 +1,6 @@
 # GCP access requirements for Golden Path
 
-**Platform version:** v0.3.7 · **Date:** 2026-06-24  
+**Platform version:** v0.3.8 · **Date:** 2026-06-24  
 **Audience:** Engineering leads, platform/DevOps, FinOps, and anyone onboarding to Golden Path
 
 ---

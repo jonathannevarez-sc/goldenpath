@@ -1,6 +1,6 @@
 # goldenpath — architecture document
 
-> **Generated:** 2026-06-16 | **Version:** v0.3.7 (Phase 1 + Phase 2, enterprise-agnostic)
+> **Generated:** 2026-06-16 | **Version:** v0.3.8 (Phase 1 + Phase 2, enterprise-agnostic)
 >
 > **Render diagrams:** Paste any `mermaid` code block into [Mermaid Live Editor](https://mermaid.live/) or view directly in GitHub / Obsidian.
 
@@ -500,18 +500,23 @@ goldenpath/
 ## Recommendations
 
 ### 1. Add Terraform Remote State Backend
+
 `platform/bootstrap/terraform.tfstate` is local by default. For team use, state should live in a GCS bucket (`tfstate_bucket_name` variable exists but is optional). Without remote state, concurrent bootstrap runs can corrupt state. **Priority: High.**
 
 ### 2. Pin Module Git References More Tightly
+
 Templates use `@GOLDENPATH_VERSION` for module sources. Git tags are mutable — a force-push silently changes what every service deploys. Document a procedure to pin `ref=<commit-sha>` in production service repos and update via controlled releases.
 
 ### 3. Rotate MCP API Keys and Document Hosted Setup
+
 Hosted MCP now enforces `MCP_API_KEY` via `auth.py`, but key rotation and Secret Manager storage for the hosted deployment are not automated. Add a rotation runbook and wire `MCP_API_KEY` into `mcp/infra/` Secret Manager binding. **Priority: Medium.**
 
 ### 4. Surface the Audit Log
+
 `audit.py` writes JSON to stderr (captured by Cloud Run logs), but there is no alerting dashboard. Create a log-based metric on `jsonPayload.event` for `scaffold_service` and `trigger_deploy` so platform teams have visibility on AI-driven write actions.
 
 ### 5. Add a `prod` tfvars Validation Gate
+
 `terraform plan -var-file=prod.tfvars` has no guard against `allow_unauthenticated = true` in production. Add a `precondition` block in `cloud-run/main.tf` asserting production services cannot be publicly invokable without explicit override.
 
 ---

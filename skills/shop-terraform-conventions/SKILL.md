@@ -23,7 +23,7 @@ Do not add service Cloud Run resources to bootstrap. Do not recreate Artifact Re
 ## Rules
 
 1. **Service repos** call shared modules from `goldenpath` git tag — do not copy module source
-2. Pin `goldenpath_version` in `infra/*.tfvars` (from `GOLDENPATH_VERSION` in enterprise.env, e.g. `v0.3.7`)
+2. Pin `goldenpath_version` in `infra/*.tfvars` (from `GOLDENPATH_VERSION` in enterprise.env, e.g. `v0.3.8`)
 3. Set `artifact_registry_repo` to `ARTIFACT_REGISTRY_REPO` — repo is created in bootstrap, referenced in deploy
 4. **No click-ops** in production — all changes via Terraform + PR
 5. **No external images** — Cloud Run pulls Artifact Registry only

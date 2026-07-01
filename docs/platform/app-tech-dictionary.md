@@ -1,6 +1,6 @@
 # goldenpath — app tech stack dictionary
 
-> **Generated:** 2026-06-16 | **Version:** v0.3.7 (Phase 1 + Phase 2, enterprise-agnostic) — repo `goldenpath` (enterprise-agnostic)
+> **Generated:** 2026-06-16 | **Version:** v0.3.8 (Phase 1 + Phase 2, enterprise-agnostic) — repo `goldenpath` (enterprise-agnostic)
 >
 > **How to use:** This document is a standalone, offline-ready reference for every technology used in the goldenpath platform. Browse by category, jump via the TOC, or `Ctrl+F` a term. Each entry is phrased to be directly quotable in technical articles and blog posts.
 
@@ -115,6 +115,7 @@
 **Purpose in App:** Powers `cli/shop` (~475 lines), wizard bash backend (`goldenpath_setup.sh`), env/deploy launchers at `scripts/*.sh`, and `scripts/lib/*.sh` helpers. Orchestrates template copying, token substitution, GitHub publish, and WIF trust.
 
 **Key Features:**
+
 - Pipelines (`|`) chain commands without intermediate files
 - `set -euo pipefail` turns on strict error handling (used in `shop`)
 - Here-docs (`<<'EOF'`) for inline multi-line strings
@@ -122,10 +123,12 @@
 - `find -print0 | while IFS= read -r -d '' file` for safe filename handling with spaces
 
 **Pros:**
+
 - Zero dependencies — available on every CI runner and developer machine
 - Ideal for orchestrating other CLIs (gcloud, git, docker) with minimal overhead
 
 **Cons:**
+
 - No type system; silent failures without `set -e`
 - Complex logic becomes hard to maintain at scale (mitigated by `scripts/lib/` shared helpers)
 
@@ -161,6 +164,7 @@
 **Purpose in App:** All infrastructure in this platform is declared in HCL — the bootstrap (`platform/bootstrap/`), the five reusable modules (`modules/`), and the per-service `infra/main.tf` in every template. HCL describes GCP resources declaratively; Terraform handles the apply.
 
 **Key Features:**
+
 - Declarative `resource`, `module`, `variable`, `output`, and `locals` blocks
 - `for_each` and `count` for resource iteration (used extensively in bootstrap)
 - `dynamic` blocks for conditional sub-blocks (used in `cloud-run` module for `env` and `secret_env`)
@@ -168,10 +172,12 @@
 - Native functions: `coalesce()`, `substr()`, `replace()`, `setproduct()`
 
 **Pros:**
+
 - Readable by non-programmers; self-documenting with `description` fields
 - Native Terraform tooling (fmt, validate, plan, apply)
 
 **Cons:**
+
 - Not a general-purpose language; complex logic requires workarounds
 - Module `source` must be a string literal (no variables), which forces the token-replacement pattern in templates
 
@@ -190,16 +196,19 @@
 **Purpose in App:** Runtime for the Express template (REST API) and Next.js template (SSR server). Also the host environment for Vite builds in the React SPA and Svelte SPA templates during CI.
 
 **Key Features:**
+
 - Non-blocking I/O via event loop — handles concurrent requests without threads
 - npm ecosystem (largest package registry)
 - Native ESM (`"type": "module"`) support — used in Express, React SPA, and Svelte SPA templates
 - Built-in test runner (`node --test`) used across Node templates (no jest/mocha needed)
 
 **Pros:**
+
 - Single language (JS/TS) across frontend and backend
 - Excellent Docker image availability (`node:20-alpine` is ~150MB)
 
 **Cons:**
+
 - CPU-bound work blocks the event loop
 - `node_modules` size can be large; `npm ci` required for reproducible installs in CI
 
@@ -218,6 +227,7 @@
 **Purpose in App:** Used for three distinct roles: (1) the FastAPI template's application code (`app/main.py`), (2) the Streamlit template's dashboard app (`app.py`), and (3) the entire MCP server package (`mcp/goldenpath_mcp/`). Python 3.11+ is required by the MCP server; templates use 3.12.
 
 **Key Features:**
+
 - Type hints (PEP 484+) — used throughout the MCP server (`from __future__ import annotations`)
 - Dataclasses (`@dataclass(frozen=True)`) — used for immutable `Settings` in `config.py`
 - `subprocess.run()` — used in `gcp.py` and `github_ops.py` for CLI delegation
@@ -225,10 +235,12 @@
 - f-strings and dict unpacking (`**fields`) — used in `audit.py`
 
 **Pros:**
+
 - Dominant in data/ML/API tooling; Streamlit and FastAPI are Python-native
 - `asyncio` support enables high-concurrency ASGI servers
 
 **Cons:**
+
 - Slower startup time vs. Node.js (noticeable in Cloud Run cold starts)
 - Global interpreter lock (GIL) limits true CPU parallelism in CPython
 
@@ -247,16 +259,19 @@
 **Purpose in App:** Used in the Next.js template — `tsconfig.json` configures strict mode, `@types/node`, `@types/react`, and `@types/react-dom` provide type definitions. The health route (`src/app/api/health/route.ts`) is typed.
 
 **Key Features:**
+
 - Static type checking catches bugs at compile time
 - Excellent IDE autocomplete via language server (tsserver)
 - Structural typing: if it has the right shape, it's compatible
 - `strict` mode enables the most thorough checks
 
 **Pros:**
+
 - Catches an entire class of runtime errors before deployment
 - Self-documenting — return types serve as living documentation
 
 **Cons:**
+
 - Adds a compilation step; `tsconfig.json` can be complex
 - Type errors in third-party libraries can require `@ts-ignore` workarounds
 
@@ -277,6 +292,7 @@
 **Purpose in App:** The default Golden Path template — `nextjs` is the template selected when no `--template` flag is provided. It scaffolds a Next.js 14 App Router project with a health endpoint at `/api/health`, a standalone Docker output, and a 3-stage multi-stage Dockerfile.
 
 **Key Features:**
+
 - App Router (`src/app/`) with file-system-based routing
 - React Server Components render on the server, reducing client JS
 - `next build --output standalone` creates a self-contained Node.js server (used in Dockerfile)
@@ -284,10 +300,12 @@
 - Built-in ESLint config (`eslint-config-next`) for Next.js-specific rules
 
 **Pros:**
+
 - Zero-config SSR + static generation + API in one framework
 - Standalone build output is optimal for containers (no separate static file server needed)
 
 **Cons:**
+
 - Larger Docker image than a pure SPA; SSR adds latency on cold starts
 - App Router has a steep learning curve vs. Pages Router
 
@@ -306,16 +324,19 @@
 **Purpose in App:** Core UI library for both the Next.js template and the React SPA template. In Next.js, React 18 powers server and client components. In the React SPA, React renders the entire app client-side via Vite.
 
 **Key Features:**
+
 - JSX syntax: HTML-like markup embedded in JavaScript
 - Component composition: build complex UIs from small, reusable pieces
 - `useState`, `useEffect`, and other hooks manage local state and side effects
 - Concurrent Mode (React 18): prioritizes rendering for smooth UX
 
 **Pros:**
+
 - Largest ecosystem of any UI library; extensive community and tooling
 - Stable, predictable component model
 
 **Cons:**
+
 - JSX requires a build step (Babel/Vite)
 - No built-in routing or state management — requires additional libraries (react-router, zustand, etc.)
 
@@ -334,6 +355,7 @@
 **Purpose in App:** Used in the React SPA template (`src/main.jsx`) as the entry point: `createRoot(document.getElementById('root')).render(<App />)`. In the Next.js template, Next.js manages React DOM internally.
 
 **Key Features:**
+
 - `createRoot` (React 18): enables concurrent features
 - `hydrateRoot`: attaches React to server-rendered HTML without re-rendering
 - `flushSync`: synchronous state updates for edge cases
@@ -356,16 +378,19 @@
 **Purpose in App:** Powers the `svelte-spa` template — a client-side SPA served by nginx. Svelte compiles to static HTML/JS/CSS, which is then served as a static bundle.
 
 **Key Features:**
+
 - Compile-time reactivity: no virtual DOM, no diffing at runtime
 - Single-file components (`.svelte`) contain script, template, and style
 - Scoped CSS by default — no class-name collision risk
 - `$:` reactive statements auto-rerun when dependencies change
 
 **Pros:**
+
 - Smallest bundle size of any major framework (no runtime shipped to browser)
 - Simple, clean syntax with less boilerplate than React
 
 **Cons:**
+
 - Smaller ecosystem than React; fewer third-party component libraries
 - Less IDE/TypeScript tooling maturity compared to React
 
@@ -386,16 +411,19 @@
 **Purpose in App:** Powers the `express` template — a Node.js REST API with a single health endpoint at `/api/health`. Used when teams want a lightweight Node.js API without the SSR overhead of Next.js.
 
 **Key Features:**
+
 - `app.get('/path', handler)` routing model
 - Middleware chain: `app.use(middleware)` for request processing
 - Native Node.js `http.IncomingMessage` / `http.ServerResponse` under the hood
 - ESM-compatible in Express 4.21+ (`"type": "module"` in `package.json`)
 
 **Pros:**
+
 - Smallest possible footprint for a Node.js API
 - Zero magic — every behavior is explicit middleware
 
 **Cons:**
+
 - No built-in validation, ORM, or authentication — requires assembling your own stack
 - Async error handling requires wrapper middleware in Express 4
 
@@ -414,6 +442,7 @@
 **Purpose in App:** Powers the `fastapi` template — a Python REST API with a health endpoint. FastAPI auto-generates OpenAPI docs at `/docs` from type annotations, and validates request/response models using Pydantic.
 
 **Key Features:**
+
 - Automatic OpenAPI (`/docs`) and JSON Schema (`/openapi.json`) generation
 - `@app.get("/path")` decorator routing with type-annotated path/query parameters
 - Dependency injection system via `Depends()`
@@ -421,10 +450,12 @@
 - Pydantic models for request body validation
 
 **Pros:**
+
 - Near-zero boilerplate for a typed, documented API
 - Auto-generated docs eliminate the need to maintain separate API documentation
 
 **Cons:**
+
 - Pydantic v2 migration (FastAPI 0.100+) has breaking changes from v1
 - Slightly higher cold-start time than Flask due to Starlette initialization
 
@@ -443,16 +474,19 @@
 **Purpose in App:** Powers the `streamlit` template for internal tools and dashboards. Engineers write Python scripts (`app.py`) using Streamlit's widget API; Streamlit automatically handles the web server, state management, and browser rendering.
 
 **Key Features:**
+
 - `st.write()`, `st.dataframe()`, `st.chart()` — one-line data display
 - `st.button()`, `st.slider()`, `st.selectbox()` — reactive widgets with no JS
 - Session state (`st.session_state`) for multi-step flows
 - Automatic re-run on widget interaction
 
 **Pros:**
+
 - Data scientists can build production-grade internal tools without frontend skills
 - Deep integration with pandas, matplotlib, Altair, and Plotly
 
 **Cons:**
+
 - Not suitable for high-concurrency public-facing apps
 - Limited layout control compared to a proper frontend framework
 
@@ -471,16 +505,19 @@
 **Purpose in App:** The production HTTP server for the FastAPI template. The Dockerfile `CMD` is `uvicorn app.main:app --host 0.0.0.0 --port 8000`. In the MCP server, Uvicorn is installed via `mcp[cli]` to support SSE transport.
 
 **Key Features:**
+
 - Built on `uvloop` (libuv-based event loop) and `httptools` for maximum throughput
 - `--workers N` flag for multi-process mode (production)
 - Supports HTTP/1.1 and WebSockets
 - `--reload` flag for development auto-restart on file change
 
 **Pros:**
+
 - One of the fastest Python ASGI servers available
 - Zero configuration for basic use — just `uvicorn module:app`
 
 **Cons:**
+
 - Single-process by default; needs `--workers` or `gunicorn` for CPU-bound parallelism
 - Not suitable as a reverse proxy; should sit behind nginx or Cloud Run's ingress
 
@@ -534,6 +571,7 @@
 **Purpose in App:** Manages dependencies for all Node.js templates. `npm ci` (not `npm install`) is used in CI for reproducible, lockfile-respecting installs. The `npm run lint` and `npm test` scripts are called in the reusable CI workflow.
 
 **Key Features:**
+
 - `package.json` declares dependencies and scripts
 - `package-lock.json` pins exact transitive dependency versions
 - `npm ci` — clean install from lockfile, fails if `package.json` and lockfile diverge
@@ -557,6 +595,7 @@
 **Purpose in App:** Installs Python dependencies in all Python templates and the MCP server. `pip install --no-cache-dir -r requirements.txt` is the Dockerfile pattern used to keep image layers small.
 
 **Key Features:**
+
 - `requirements.txt` with pinned versions (`fastapi==0.115.0`)
 - `pip install -e .` for editable installs (used for MCP server local dev via `.pth` file)
 - `--no-cache-dir` reduces Docker layer size
@@ -577,16 +616,19 @@
 **Purpose in App:** Build tool for the `react-spa` and `svelte-spa` templates. `vite build` produces a static bundle in `dist/`, which is copied into the nginx Docker image. `vite dev` provides HMR for local development.
 
 **Key Features:**
+
 - Dev server serves modules as native ESM — no bundling during development
 - `vite build` uses Rollup for code splitting and tree-shaking
 - Plugin system: `@vitejs/plugin-react` and `@sveltejs/vite-plugin-svelte`
 - `vite preview` serves the production build locally for smoke testing
 
 **Pros:**
+
 - 10-100x faster dev server startup than webpack for large projects
 - Zero-config for standard React/Svelte SPAs
 
 **Cons:**
+
 - Dev (ESM) and prod (Rollup bundle) environments differ slightly — rare subtle bugs
 - Less mature plugin ecosystem than webpack for enterprise edge cases
 
@@ -607,16 +649,19 @@
 **Purpose in App:** The core of the `goldenpath_mcp` package. `FastMCP("goldenpath")` creates the MCP app instance. `@mcp.tool()` decorators register **13 tools**; `@mcp.resource()` decorators register 3 virtual resource endpoints. `mcp.run(transport=...)` starts the server.
 
 **Key Features:**
+
 - `@mcp.tool()` — registers a Python function as an MCP tool callable by AI clients
 - `@mcp.resource("goldenpath://path")` — registers a URI-addressable read-only resource
 - Transport switching: `stdio`, `sse`, or `streamable-http` via `mcp.run(transport=...)`
 - Automatic JSON schema generation from Python type annotations
 
 **Pros:**
+
 - Near-zero boilerplate: a function decorated with `@mcp.tool()` is instantly callable by AI
 - Compatible with MCP clients (Claude Desktop, Claude Code, and other MCP-capable IDEs)
 
 **Cons:**
+
 - Relatively new (2024); API surface may change between minor versions
 - No built-in auth middleware — must be added manually for SSE/HTTP transports
 
@@ -635,16 +680,19 @@
 **Purpose in App:** The entire `mcp/` directory implements an MCP server that exposes the Golden Path platform API to AI agents. Claude (and other MCP clients) can call `scaffold_service()`, `list_templates()`, `trigger_deploy()`, etc. through standard MCP protocol messages.
 
 **Key Features:**
+
 - **Tools**: functions the AI can call (with parameters and return values)
 - **Resources**: URI-addressed read-only content (like a virtual filesystem)
 - **Prompts**: reusable prompt templates (not used in this app)
 - **Transport**: stdio (local process), SSE (HTTP streaming), streamable-http
 
 **Pros:**
+
 - AI agents get structured, typed access to platform capabilities — no prompt engineering to extract JSON
 - Completely decoupled: the MCP server is a standalone process the AI talks to
 
 **Cons:**
+
 - Ecosystem is very new; breaking protocol changes are possible
 - Requires MCP-capable clients; traditional LLM APIs don't speak MCP
 
@@ -659,6 +707,7 @@
 **Definition:** MCP Resources are read-only, URI-addressable content endpoints served by an MCP server — analogous to a virtual filesystem that AI agents can browse and read.
 
 **Purpose in App:** Three resource endpoints are registered:
+
 - `goldenpath://meta/version` — returns channel/version metadata
 - `goldenpath://docs/{path}` — serves Markdown docs from `docs/`
 - `goldenpath://skills/{name}/SKILL.md` — serves agent skill instructions from `skills/`
@@ -735,6 +784,7 @@
 **Purpose in App:** Used in every Terraform configuration (bootstrap and all modules). All GCP resources (`google_cloud_run_v2_service`, `google_iam_workload_identity_pool`, `google_artifact_registry_repository`, etc.) are managed through this provider. Pinned to `>= 5.30.0`.
 
 **Key Features:**
+
 - `google_cloud_run_v2_service` — manages Cloud Run services with full v2 API support
 - `google_iam_workload_identity_pool` and `_provider` — WIF setup
 - `google_project_service` — enables GCP APIs programmatically
@@ -757,16 +807,19 @@
 **Purpose in App:** The exclusive infrastructure provisioning tool. The bootstrap Terraform sets up the GCP projects; each service repo's `infra/` directory contains Terraform that calls the platform modules. The CI workflow runs `terraform init`, `terraform plan`, and `terraform apply` on every deploy.
 
 **Key Features:**
+
 - `plan` shows a diff of changes before applying — safe preview
 - `apply` executes the plan against the real infrastructure
 - State file tracks what Terraform has created (critical for updates/deletes)
 - Module system enables reuse: `source = "git::https://github.com/..."` fetches modules from git tags
 
 **Pros:**
+
 - Provider-agnostic: same workflow for GCP, AWS, Azure, Kubernetes
 - `terraform plan` output is the primary audit trail for infrastructure changes
 
 **Cons:**
+
 - State file must be stored safely (remote backend recommended)
 - Slow for large state files; `terraform apply` is synchronous
 
@@ -800,6 +853,7 @@
 **Purpose in App:** Five modules live in `modules/`: `artifact-registry`, `cloud-run`, `observability`, `secrets`, `service-identity`. Service repos reference them via git tag (`ref=v0.2.0`), ensuring all services use the same, versioned infrastructure definitions. The `_shared/infra/main.tf` template wires all five modules together.
 
 **Key Features:**
+
 - Input `variable` blocks define the module's interface
 - `output` blocks expose values to the caller (e.g., `module.identity.email`)
 - `source = "git::https://github.com/org/repo.git//modules/cloud-run?ref=v0.2.0"` pins to a git tag
@@ -819,6 +873,7 @@
 **Purpose in App:** The keystone security mechanism of the platform. The bootstrap creates a WIF pool and provider that trust `token.actions.githubusercontent.com`. GitHub Actions exchanges a short-lived OIDC JWT for a GCP service account token via `google-github-actions/auth@v2`. No credentials are ever stored in GitHub Secrets — only the WIF provider resource name and service account email.
 
 **Key Features:**
+
 - OIDC attribute mapping: maps GitHub claims (`repository`, `ref`, `actor`) to GCP IAM conditions
 - `attribute_condition`: `assertion.repository.startsWith('org/')` — trusts all org repos
 - Short-lived tokens: OIDC tokens expire in 10 minutes; WIF tokens expire in 1 hour
@@ -845,6 +900,7 @@
 **Purpose in App:** The exclusive Docker image registry. The CI workflow builds and pushes images to `{region}-docker.pkg.dev/{project}/{repo}/{name}:{sha}`. The `cloud-run` Terraform module enforces this with a `precondition` that rejects non-Artifact-Registry image URIs.
 
 **Key Features:**
+
 - Regional storage: images are stored in the same region as Cloud Run services
 - IAM-based access: `roles/artifactregistry.writer` for CI push, `roles/artifactregistry.reader` for Cloud Run runtime
 - Vulnerability scanning (optional, not configured in this platform)
@@ -902,6 +958,7 @@
 **Purpose in App:** The exclusive compute platform for all services. Every deployed service runs as a Cloud Run service named `{service_name}-{environment}`. The `cloud-run` module configures scaling (min/max instances), health probes, resource limits, environment variables, and Secret Manager references.
 
 **Key Features:**
+
 - Scale-to-zero: `min_instance_count = 0` means no idle cost
 - Request-based CPU billing: CPU only allocated during request handling
 - `INGRESS_TRAFFIC_ALL`: accepts traffic from the internet (public services)
@@ -976,6 +1033,7 @@
 **Purpose in App:** The exclusive CI/CD engine. Every service repo references the reusable `deploy.yml` from the `goldenpath` platform repo. Dev deploys trigger on `push` to `main`; prod deploys via `workflow_dispatch` with `environment=prod`.
 
 **Key Features:**
+
 - `workflow_call` trigger enables reusable workflows across repositories
 - `permissions: id-token: write` is required for WIF OIDC token generation
 - `environment:` block enforces deployment environment protection rules
@@ -997,6 +1055,7 @@
 **Purpose in App:** The core distribution mechanism for the Golden Path CI. The single `deploy.yml` in `goldenpath` is referenced by every service repo. When the platform team updates the workflow (e.g., adds a new security scan), all service repos benefit on their next deploy without any changes. Service repos pin to `@v0.2.0` for stability.
 
 **Key Features:**
+
 - `on: workflow_call:` declares the workflow as reusable
 - `inputs:` and `secrets:` define the contract
 - `${{ inputs.service_name }}` accesses caller-provided values
@@ -1058,6 +1117,7 @@
 **Purpose in App:** Every service template includes a `Dockerfile`. The CI workflow runs `docker build` and `docker push` on every commit. The MCP server itself ships as a Docker image (`mcp/Dockerfile`) for Cloud Run SSE deployment.
 
 **Key Features:**
+
 - `COPY --from=stage` for multi-stage builds
 - `USER` instruction for non-root runtime (used in all templates)
 - `EXPOSE` documents the container port
@@ -1092,6 +1152,7 @@
 **Purpose in App:** The production server for `react-spa` and `svelte-spa` templates. After `vite build` produces a static `dist/`, Docker copies it into `nginx:alpine` and serves it. The `nginx.conf` serves `index.html` as the SPA fallback (`try_files $uri $uri/ /index.html`) and exposes a `/health` endpoint.
 
 **Key Features:**
+
 - `try_files $uri $uri/ /index.html` — SPA client-side routing support
 - `location /health { return 200 'ok'; }` — lightweight health check for Cloud Run probes
 - `access_log off` on health endpoint — prevents noise in logs
@@ -1268,7 +1329,7 @@
 
 **Definition:** `cli/shop` is the Golden Path terminal CLI (Bash, ~475 lines) for scaffolding and deploying services. It reads `templates/catalog.json`, copies templates, replaces tokens, and orchestrates GitHub + GCP publish flows. Separate from the setup wizard — uses `.goldenpath-cli.local.json`.
 
-**Origin/History:** Phase 1 (`shop new`, `shop list`); extended with `publish`, `verify`, `doctor`, `upgrade`, `config` for one-command deploy. Platform pin from `GOLDENPATH_VERSION` in `enterprise.env` (currently `v0.3.7`).
+**Origin/History:** Phase 1 (`shop new`, `shop list`); extended with `publish`, `verify`, `doctor`, `upgrade`, `config` for one-command deploy. Platform pin from `GOLDENPATH_VERSION` in `enterprise.env` (currently `v0.3.8`).
 
 **Purpose in App:**
 
@@ -1284,6 +1345,7 @@
 Also callable from MCP `scaffold_service` (wraps `shop new`).
 
 **Key Features:**
+
 - Token replacement via `scripts/lib/scaffold-tokens.sh` (shared with bash wizard)
 - Sources `wif-trust-repo.sh` for per-repo WIF IAM bindings
 - Private platform repo: auto-sets `GOLDENPATH_MODULE_TOKEN` from `gh auth token`
@@ -1486,7 +1548,7 @@ When an AI agent loads a skill via `get_skill("deploy-to-shop-gcp")`, it receive
 | git | Dev Tool | Version control system | system |
 | PowerShell (pwsh) | Language/Runtime | Setup wizard + PS modules | 7+ |
 | Pester | Test Framework | PowerShell wizard unit tests | 5+ |
-| shop CLI | Platform Tool | Scaffold + publish CLI (Bash) | `goldenpath_ops_cli.py`; pin `v0.3.7` |
+| shop CLI | Platform Tool | Scaffold + publish CLI (Bash) | `goldenpath_ops_cli.py`; pin `v0.3.8` |
 | Setup Wizard | Platform Tool | 4 backends (PS/bash/py/Streamlit) | — |
 | check-repo-hygiene.sh | Platform Tool | Repo layout health check | — |
 | Private workflow access | Platform Concept | Private caller repos for private platform | — |

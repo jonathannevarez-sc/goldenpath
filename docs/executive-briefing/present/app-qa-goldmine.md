@@ -1,6 +1,6 @@
 # Golden Path — Q&A Gold Mine
 
-**Platform version:** v0.3.7  
+**Platform version:** v0.3.8  
 **Purpose:** Comprehensive question-and-answer preparation for executive briefings, technical deep-dives, security reviews, and developer onboarding sessions.  
 **Audience:** Presenters, platform sponsors, and subject-matter experts fielding questions about Golden Path.
 
@@ -14,7 +14,7 @@ Developers scaffold **separate service repositories** — not applications insid
 
 Golden Path is **opt-in for legacy services**. It is not a forced migration. Three onboarding paths — CLI, wizard, and MCP — converge on identical artifacts. Enterprise-specific values (billing, projects, GitHub org, region) live in `config/enterprise.env`, not in committed scripts.
 
-This document provides confident, specific answers referencing Golden Path v0.3.7 capabilities. Use it to prepare for any audience — from the boardroom to the engineering standup.
+This document provides confident, specific answers referencing Golden Path v0.3.8 capabilities. Use it to prepare for any audience — from the boardroom to the engineering standup.
 
 ---
 
@@ -58,9 +58,9 @@ No. Golden Path is explicitly opt-in for existing services. The platform guide l
 
 Golden Path defines concrete success metrics in the platform guide. Primary targets include: time to first `dev` deploy under one day (stretch: under one hour), zero manual steps after scaffold, tracking percentage of new services created from Golden Path templates (aim >50% within six months), 100% standard telemetry for templated services, decreasing security findings on new services versus baseline, and positive developer satisfaction from pilot surveys. The acceptance test — scaffold and deploy to `dev` with zero manual edits — is the most important technical criterion; if it passes, the platform works.
 
-### Q7. What does v0.3.7 include today?
+### Q7. What does v0.3.8 include today?
 
-Version v0.3.7 delivers Phase 1 (paved-road artifacts) and Phase 2 (MCP server) in an enterprise-agnostic form. Concrete deliverables include: bootstrap Terraform for one-time GCP setup with Workload Identity Federation, five reusable Terraform modules (cloud-run, secrets, service-identity, artifact-registry, observability), six service templates (Next.js, FastAPI, Streamlit, Express, React SPA, Svelte SPA), the `shop` CLI, four wizard backends (bash, Python, PowerShell, Streamlit) sharing a 15-option menu, a reusable GitHub Actions `deploy.yml` workflow, an MCP server with 13 tools and 3 resources, and six official agent skills. Enterprises configure org-specific values in `config/enterprise.env`.
+Version v0.3.8 delivers Phase 1 (paved-road artifacts) and Phase 2 (MCP server) in an enterprise-agnostic form. Concrete deliverables include: bootstrap Terraform for one-time GCP setup with Workload Identity Federation, five reusable Terraform modules (cloud-run, secrets, service-identity, artifact-registry, observability), six service templates (Next.js, FastAPI, Streamlit, Express, React SPA, Svelte SPA), the `shop` CLI, four wizard backends (bash, Python, PowerShell, Streamlit) sharing a 15-option menu, a reusable GitHub Actions `deploy.yml` workflow, an MCP server with 13 tools and 3 resources, and six official agent skills. Enterprises configure org-specific values in `config/enterprise.env`.
 
 ### Q8. How does Golden Path compare to hiring more platform engineers?
 
@@ -76,7 +76,7 @@ Without Golden Path, the organization continues paying the per-service tax: week
 
 ### Q11. Can Golden Path work for multiple business units or enterprises?
 
-Yes. Golden Path is enterprise-agnostic by design. Org-specific values — billing account, dev/prod/sandbox project IDs, GitHub organization, region, naming conventions — live in `config/enterprise.env`, which is gitignored locally. The same platform codebase serves multiple enterprises by swapping configuration, not forking the repository. Service repos pin `goldenpath_version` in their Terraform variables and reference the reusable workflow at the matching git tag (e.g., `@v0.3.7`). This portability is a deliberate architectural choice documented in the problem statement.
+Yes. Golden Path is enterprise-agnostic by design. Org-specific values — billing account, dev/prod/sandbox project IDs, GitHub organization, region, naming conventions — live in `config/enterprise.env`, which is gitignored locally. The same platform codebase serves multiple enterprises by swapping configuration, not forking the repository. Service repos pin `goldenpath_version` in their Terraform variables and reference the reusable workflow at the matching git tag (e.g., `@v0.3.8`). This portability is a deliberate architectural choice documented in the problem statement.
 
 ### Q12. What is the relationship between Golden Path and our cloud provider commitment?
 
@@ -94,7 +94,7 @@ The `goldenpath` repository is the **platform**, not an application. Running `sh
 
 Golden Path has three layers governed by one rule: MCP is the front door, CI is the deploy engine, GCP is the runtime. **Layer A — Paved-road artifacts:** bootstrap Terraform, reusable modules, six service templates, and the shared `deploy.yml` workflow — this is what actually runs in production. **Layer B — MCP server:** serves official skills and docs as read-only resources, plus 13 platform tools for status, scaffolding, validation, and guarded deploy triggers. **Layer C — Discoverability and support:** getting-started docs, wizard menus, support channels, and adoption metrics. Layers B and C improve developer experience; Layer A is the non-negotiable foundation.
 
-### Q15. What templates are available in v0.3.7?
+### Q15. What templates are available in v0.3.8?
 
 Six official templates ship in `templates/`, cataloged in `templates/catalog.json`:
 
@@ -151,7 +151,7 @@ Bootstrap is a one-time Terraform apply in `platform/bootstrap/` that enables 11
 
 ### Q24. How do services pin platform versions?
 
-Service repos reference the reusable workflow as `uses: YOUR_ORG/goldenpath/.github/workflows/deploy.yml@v0.3.7` and pin `goldenpath_version` in `infra/dev.tfvars` and `infra/prod.tfvars` (from `GOLDENPATH_VERSION` in enterprise.env). Terraform module sources use the same git tag. Platform releases bundle modules, template refs, skills, and docs under one semver tag. Services upgrade by updating the pin and running their normal deploy pipeline. Architecture documentation recommends documenting a procedure to pin `ref=<commit-sha>` in production for immutability beyond mutable git tags.
+Service repos reference the reusable workflow as `uses: YOUR_ORG/goldenpath/.github/workflows/deploy.yml@v0.3.8` and pin `goldenpath_version` in `infra/dev.tfvars` and `infra/prod.tfvars` (from `GOLDENPATH_VERSION` in enterprise.env). Terraform module sources use the same git tag. Platform releases bundle modules, template refs, skills, and docs under one semver tag. Services upgrade by updating the pin and running their normal deploy pipeline. Architecture documentation recommends documenting a procedure to pin `ref=<commit-sha>` in production for immutability beyond mutable git tags.
 
 ### Q25. What testing does the platform include?
 
@@ -203,7 +203,7 @@ Golden Path deploys to GCP regions configured in `config/enterprise.env` (e.g., 
 
 ### Q36. How does the platform handle vulnerability in dependencies?
 
-Service templates include dependency manifests (`package.json`, `requirements.txt`) with standard lockfile practices. The deploy pipeline runs lint and test steps before build. Container images are built in CI with immutable tags pushed to Artifact Registry. Golden Path does not include a built-in dependency scanning gate in v0.3.7 — that would be an organizational addition to the reusable workflow or a separate security pipeline. The paved road provides the hook point (CI workflow) where scanning tools can be inserted consistently across all services.
+Service templates include dependency manifests (`package.json`, `requirements.txt`) with standard lockfile practices. The deploy pipeline runs lint and test steps before build. Container images are built in CI with immutable tags pushed to Artifact Registry. Golden Path does not include a built-in dependency scanning gate in v0.3.8 — that would be an organizational addition to the reusable workflow or a separate security pipeline. The paved road provides the hook point (CI workflow) where scanning tools can be inserted consistently across all services.
 
 ### Q37. What compliance frameworks does Golden Path align with?
 
@@ -322,7 +322,7 @@ Yes, incrementally. Phase 3 includes optional extra templates beyond the current
 
 ### Q57. How does Golden Path relate to internal developer portals like Backstage?
 
-Golden Path defers Backstage or similar portals. Documentation and discoverability are delivered primarily through MCP resources, with an optional static mirror for browsers. The rationale: avoid over-engineering before proving adoption. MCP serves getting-started docs, quickstart, runbooks, and skills from pinned releases. If adoption scales and a portal becomes necessary, Golden Path's consistent service metadata (labels, standard layout) makes catalog integration straightforward — but it is not a v0.3.7 deliverable.
+Golden Path defers Backstage or similar portals. Documentation and discoverability are delivered primarily through MCP resources, with an optional static mirror for browsers. The rationale: avoid over-engineering before proving adoption. MCP serves getting-started docs, quickstart, runbooks, and skills from pinned releases. If adoption scales and a portal becomes necessary, Golden Path's consistent service metadata (labels, standard layout) makes catalog integration straightforward — but it is not a v0.3.8 deliverable.
 
 ### Q58. Can Golden Path support databases and messaging?
 
@@ -334,7 +334,7 @@ Golden Path treats AI as a first-class onboarding and operations interface, not 
 
 ### Q60. How do we handle breaking platform changes?
 
-Platform releases follow semver with git tags (e.g., `v0.3.7`). Breaking changes include migration notes and communications. Service repos pin `goldenpath_version` and upgrade on their own schedule by updating the pin in tfvars and workflow references. The platform team maintains a release train bundling modules, template refs, skills, and docs. MCP `stable` channel pointer is updated only by platform admins. This decoupled upgrade model lets conservative teams stay on older versions while pilot teams adopt beta.
+Platform releases follow semver with git tags (e.g., `v0.3.8`). Breaking changes include migration notes and communications. Service repos pin `goldenpath_version` and upgrade on their own schedule by updating the pin in tfvars and workflow references. The platform team maintains a release train bundling modules, template refs, skills, and docs. MCP `stable` channel pointer is updated only by platform admins. This decoupled upgrade model lets conservative teams stay on older versions while pilot teams adopt beta.
 
 ---
 
@@ -381,13 +381,13 @@ This Q&A Gold Mine is valuable because it anticipates the full spectrum of quest
 
 **Breadth across audiences.** Sixty questions span executives (ROI, rollout, mandatory adoption), engineers (architecture, modules, pipelines, templates), security reviewers (WIF, secrets, IAM, audit), and developers (daily workflow, wizard vs CLI, skills, troubleshooting). A presenter can prepare for a mixed room without guessing what each stakeholder will ask.
 
-**Specificity to Golden Path v0.3.7.** Answers reference real artifacts — `config/enterprise.env`, `shop new`, `deploy.yml@v0.3.7`, six templates, 13 MCP tools, four wizard backends, `PROTECTED_PROJECTS`, the acceptance test — not generic platform engineering platitudes. This builds credibility with technical audiences who will probe for substance.
+**Specificity to Golden Path v0.3.8.** Answers reference real artifacts — `config/enterprise.env`, `shop new`, `deploy.yml@v0.3.8`, six templates, 13 MCP tools, four wizard backends, `PROTECTED_PROJECTS`, the acceptance test — not generic platform engineering platitudes. This builds credibility with technical audiences who will probe for substance.
 
 **Honest about gaps.** Open decisions, architecture recommendations, off-road policy, and MCP fallback paths are addressed directly. Stakeholders trust presenters who acknowledge what is not yet decided instead of overselling completeness.
 
 **Reusable across formats.** Each Q&A is 100–300 words — suitable for verbal responses, email follow-ups, FAQ pages, internal wikis, or AI assistant grounding. The preparation tips section converts Q&A knowledge into meeting execution.
 
-**Living document.** As Golden Path evolves beyond v0.3.7 — new templates, remote state backend, audit dashboards, production gates — this document should be updated with each release. The categorized structure makes additions straightforward.
+**Living document.** As Golden Path evolves beyond v0.3.8 — new templates, remote state backend, audit dashboards, production gates — this document should be updated with each release. The categorized structure makes additions straightforward.
 
 **Competitive advantage in presentations.** Most platform pitches fail in Q&A because presenters lack depth. This document ensures confident, accurate responses that demonstrate the platform team has thought through business, technical, security, and developer concerns — turning skepticism into sponsorship.
 

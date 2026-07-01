@@ -93,9 +93,9 @@ permissions:
 git push origin main --tags
 ```
 
-Tags on remote should include: `phase-1`, `phase-2`, `v0.2.0`, `v0.3.7`.
+Tags on remote should include: `phase-1`, `phase-2`, `v0.2.0`, `v0.3.8`.
 
-Service templates pin modules and workflow at **`v0.3.7`** (set in `config/enterprise.env`).
+Service templates pin modules and workflow at **`v0.3.8`** (set in `config/enterprise.env`).
 
 ## Step 4 — Validate template deploy (platform smoke test)
 
@@ -120,7 +120,7 @@ Confirm GitHub Actions deploys to `dev` Cloud Run. **Zero manual edits** after s
 
 ## Step 6 — Phase 2 (MCP)
 
-Phase 2 is delivered in repo (`v0.3.7`). Configure team clients:
+Phase 2 is delivered in repo (`v0.3.8`). Configure team clients:
 
 - [mcp/README.md](../../mcp/README.md)
 - [mcp/examples/claude-mcp.example.json](../../mcp/examples/claude-mcp.example.json)

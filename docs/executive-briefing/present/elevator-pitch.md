@@ -1,6 +1,6 @@
 # Golden Path — Elevator Pitch
 
-**Version:** v0.3.7
+**Version:** v0.3.8
 
 ---
 
@@ -31,5 +31,3 @@ Golden Path is an **enterprise-agnostic platform** — one codebase any organiza
 - **Resilient & opt-in:** CI deploys without MCP; no mandate to migrate legacy systems
 
 ---
-
-

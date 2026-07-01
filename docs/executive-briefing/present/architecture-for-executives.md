@@ -1,12 +1,9 @@
 # Golden Path — Architecture for Executives
 
-**Platform version:** v0.3.7 · **Date:** 2026-06-24  
+**Platform version:** v0.3.8 · **Date:** 2026-06-24  
 **Audience:** CEOs, VPs, program sponsors, security leaders, and non-technical stakeholders  
 
-
 ---
-
-
 
 Golden Path is our organization’s **standard factory line for cloud applications** — plus a **single front desk** where every engineer and AI assistant gets the same official instructions.
 
@@ -203,7 +200,6 @@ GCP  =  runtime      (where applications run)
 | Adoption metrics dashboard | ❌ Not yet | Define pilot KPIs in first 90 days |
 
 **Bottom line:** The architecture is **pilot-ready**. Remaining items are **enterprise polish**, not a rebuild.
-
 
 ---
 

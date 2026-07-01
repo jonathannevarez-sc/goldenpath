@@ -68,7 +68,7 @@ Unset keys fall back to `enterprise.env.example` (see [Fallback behavior](#fallb
 | `SANDBOX_PROJECT_LABELS` | Comma-separated GCP labels for sandbox creation (e.g. `purpose=goldenpath,lifecycle=sandbox`) |
 | `GCP_REGION` | Default region |
 | `PLATFORM_REPO` | This platform repo name (example default: `goldenpath`) |
-| `GOLDENPATH_VERSION` | Git tag for reusable deploy workflows (currently **`v0.3.7`** — older tags removed) |
+| `GOLDENPATH_VERSION` | Git tag for reusable deploy workflows (currently **`v0.3.8`** — older tags removed) |
 | `ARTIFACT_REGISTRY_REPO` | Shared Artifact Registry repository ID (scaffold + deploy) |
 | `MCP_SERVICE_NAME` | Cloud Run service name for hosted MCP deploy |
 | `PROTECTED_PROJECTS` | Comma-separated — teardown scripts refuse to delete |

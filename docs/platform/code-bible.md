@@ -623,7 +623,7 @@ This section walks through every required source file with **line-by-line explan
 | 18–20 | `GCP_SANDBOX_PROJECT` / `SANDBOX_PROJECT_NAME` / `SANDBOX_PROJECT_LABELS` | Isolated sandbox for personal/CI testing |
 | 23 | `GCP_REGION=us-central1` | Default region for Cloud Run and Artifact Registry |
 | 26–27 | `GITHUB_ORG` / `PLATFORM_REPO` | GitHub organization and platform repo name |
-| 30 | `GOLDENPATH_VERSION=v0.3.7` | Version tag for reusable deploy workflows |
+| 30 | `GOLDENPATH_VERSION=v0.3.8` | Version tag for reusable deploy workflows |
 | 33–34 | `ARTIFACT_REGISTRY_REPO` / `MCP_SERVICE_NAME` | Shared naming conventions |
 | 38 | `PROTECTED_PROJECTS=...` | Comma-separated list teardown scripts must **never** delete |
 | 41 | `ALLOWED_TEARDOWN_PROJECTS=` | Optional allowlist; empty means any non-protected sandbox |
@@ -979,27 +979,27 @@ These practices are **observed in Golden Path code** and should be followed when
 
 ### 5.2 Shell Scripts
 
-6. **Strict mode** — Always `set -euo pipefail` at the top of Bash scripts.
-7. **Functions over copy-paste** — Shared logic in `scripts/lib/`.
-8. **`local` variables** — Prevent accidental global state in functions.
-9. **Meaningful errors** — `die` and `printf ... >&2` with actionable messages.
-10. **Shellcheck** — Use `# shellcheck disable=SC1090` only with justification.
+1. **Strict mode** — Always `set -euo pipefail` at the top of Bash scripts.
+2. **Functions over copy-paste** — Shared logic in `scripts/lib/`.
+3. **`local` variables** — Prevent accidental global state in functions.
+4. **Meaningful errors** — `die` and `printf ... >&2` with actionable messages.
+5. **Shellcheck** — Use `# shellcheck disable=SC1090` only with justification.
 
 ### 5.3 Python
 
-11. **Type hints** — Use `dict[str, str]`, `Path | None`, `frozenset[str]`.
-12. **Immutable sets** — `frozenset` for protected project IDs (hashable, safe).
-13. **Small modules** — `enterprise.py` stays minimal for MCP package isolation.
-14. **Regex validation** — Validate WIF provider and SA email formats before use.
-15. **Graceful JSON merge** — `merge_saved_config` catches exceptions and resets bad WIF data.
+1. **Type hints** — Use `dict[str, str]`, `Path | None`, `frozenset[str]`.
+2. **Immutable sets** — `frozenset` for protected project IDs (hashable, safe).
+3. **Small modules** — `enterprise.py` stays minimal for MCP package isolation.
+4. **Regex validation** — Validate WIF provider and SA email formats before use.
+5. **Graceful JSON merge** — `merge_saved_config` catches exceptions and resets bad WIF data.
 
 ### 5.4 Infrastructure
 
-16. **Artifact Registry only** — Terraform precondition blocks external image registries.
-17. **Labels for operations** — `managed_by`, `environment`, `cost_profile` on every service.
-18. **Zero-cost profile** — `scale-to-zero` for sandboxes; explicit opt-in for always-on.
-19. **Health probes** — Startup and liveness probes aligned with template `health_check_path`.
-20. **Conditional IAM** — `count = var.allow_unauthenticated ? 1 : 0` for public access.
+1. **Artifact Registry only** — Terraform precondition blocks external image registries.
+2. **Labels for operations** — `managed_by`, `environment`, `cost_profile` on every service.
+3. **Zero-cost profile** — `scale-to-zero` for sandboxes; explicit opt-in for always-on.
+4. **Health probes** — Startup and liveness probes aligned with template `health_check_path`.
+5. **Conditional IAM** — `count = var.allow_unauthenticated ? 1 : 0` for public access.
 
 ---
 
@@ -1184,15 +1184,19 @@ Priority: **environment > CLI JSON > enterprise.env > example**.
 Complete these in order on a **sandbox GCP project**. Never use production project IDs.
 
 ### Exercise 1: Clone and Orient
+
 Clone the repo. List top-level directories. Identify where `enterprise.env.example` lives.
 
 ### Exercise 2: Create Enterprise Config
+
 ```bash
 cp config/enterprise.env.example config/enterprise.env
 ```
+
 Edit three values: `GITHUB_ORG`, `GCP_DEV_PROJECT`, `GCP_REGION`.
 
 ### Exercise 3: Load Config in Bash
+
 ```bash
 source scripts/lib/load-config.sh
 load_goldenpath_config
@@ -1200,35 +1204,44 @@ echo "$GITHUB_ORG $GCP_REGION"
 ```
 
 ### Exercise 4: Wizard Defaults JSON
+
 ```bash
 python3 scripts/lib/wizard_defaults.py --merged-env | head -20
 ```
 
 ### Exercise 5: Protected Projects
+
 Add your prod project to `PROTECTED_PROJECTS`. Run:
+
 ```bash
 python3 scripts/lib/wizard_defaults.py --protected
 ```
 
 ### Exercise 6: Shop List Templates
+
 ```bash
 ./cli/shop list
 ```
+
 Note the default template and health check paths.
 
 ### Exercise 7: Shop Config Init
+
 ```bash
 ./cli/shop config init --github-org YOUR_ORG --gcp-dev YOUR_SANDBOX --region us-central1
 ./cli/shop config show
 ```
 
 ### Exercise 8: Dry-Run Scaffold
+
 ```bash
 ./cli/shop new hello-api --template fastapi --dry-run
 ```
+
 Inspect what would be created without writing files.
 
 ### Exercise 9: Real Scaffold
+
 ```bash
 ./cli/shop new hello-api --template fastapi --output /tmp
 ls /tmp/hello-api
@@ -1236,9 +1249,11 @@ cat /tmp/hello-api/app/main.py
 ```
 
 ### Exercise 10: Token Replacement
+
 Find `{{SERVICE_NAME}}` in scaffolded files. Confirm it became `hello-api`.
 
 ### Exercise 11: FastAPI Local Run
+
 ```bash
 cd /tmp/hello-api
 pip install fastapi uvicorn
@@ -1247,41 +1262,52 @@ curl localhost:8080/api/health
 ```
 
 ### Exercise 12: Parse Env in Python
+
 Write a 5-line script using `parse_env_file` from `wizard_defaults.py` to print `GCP_REGION`.
 
 ### Exercise 13: MCP Settings
+
 ```bash
 cd mcp && GOLDENPATH_ROOT=.. python3 -c "from goldenpath_mcp.config import Settings; print(Settings.from_env())"
 ```
 
 ### Exercise 14: MCP List Templates Tool
+
 Start MCP in stdio mode and call `list_templates` (or run unit tests if available).
 
 ### Exercise 15: Terraform Plan (Dry)
+
 From a service repo with Terraform, run `terraform plan` against sandbox — do not apply without approval.
 
 ### Exercise 16: Image URL Validation
+
 In `modules/cloud-run/main.tf`, trace how `local.image` is built. Write an invalid URL and predict the precondition error.
 
 ### Exercise 17: Health Probe Alignment
+
 Compare `catalog.json` health path for `fastapi` with `main.py` route. Confirm they match.
 
 ### Exercise 18: Protection Guard
+
 ```bash
 source scripts/lib/load-config.sh && load_goldenpath_config
 goldenpath_is_protected_project "your-billing-anchor-project" && echo "protected" || echo "not protected"
 ```
 
 ### Exercise 19: Shell Exports
+
 ```bash
 python3 scripts/lib/wizard_defaults.py --shell-exports | head -5
 ```
+
 Source the output in Bash and echo one `WIZ_*` variable.
 
 ### Exercise 20: End-to-End Publish (Sandbox)
+
 ```bash
 ./cli/shop publish /tmp/hello-api --no-watch
 ```
+
 Verify GitHub repo creation and workflow dispatch (sandbox only).
 
 ---
@@ -1632,7 +1658,7 @@ A comprehensive reference of terms used in Golden Path and cloud-native developm
 
 **Secret Env** — Terraform `secret_env` map for Secret Manager references.
 
-**Semantic Versioning** — Version format like `v0.3.7`; `GOLDENPATH_VERSION`.
+**Semantic Versioning** — Version format like `v0.3.8`; `GOLDENPATH_VERSION`.
 
 **Service Account** — GCP identity for workloads; `service_account_email` in Terraform.
 
@@ -1889,6 +1915,7 @@ Before opening a pull request:
 For questions, open an issue in the platform repository or contact your platform team.
 
 **Document metrics:**
+
 - Required source files covered: 9
 - Architecture diagrams (Mermaid): 12
 - Good practices: 20

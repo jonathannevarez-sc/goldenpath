@@ -692,7 +692,7 @@ LOGS        →  Cloud Logging / standard dashboards
 HELP        →  Claude + official skills, or #golden-path
 ```
 
-### MCP tools (Phase 2 — shipped in `v0.3.7`)
+### MCP tools (Phase 2 — shipped in `v0.3.8`)
 
 **13 tools** — full list in [`mcp/README.md`](../../mcp/README.md). Bootstrap and `shop publish` are **not** MCP tools.
 

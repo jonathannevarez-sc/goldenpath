@@ -1,6 +1,6 @@
 # Golden Path — App Overview
 
-**Version:** v0.3.7 · **Audience:** Anyone new to the platform — executives, product engineers, and non-technical stakeholders
+**Version:** v0.3.8 · **Audience:** Anyone new to the platform — executives, product engineers, and non-technical stakeholders
 
 ---
 
@@ -336,7 +336,7 @@ Checks: branch name, WIF secrets, unreplaced tokens, project mismatch.
 | **WIF (Workload Identity Federation)** | Keyless authentication from GitHub Actions to GCP — no stored service account keys |
 | **MCP (Model Context Protocol)** | Standard protocol connecting AI assistants (Claude) to tools and documentation |
 | **enterprise.env** | Org-specific config file (gitignored) — billing, projects, GitHub org, region |
-| **GOLDENPATH_VERSION** | Git tag (e.g. `v0.3.7`) that service repos pin for modules and deploy workflow |
+| **GOLDENPATH_VERSION** | Git tag (e.g. `v0.3.8`) that service repos pin for modules and deploy workflow |
 | **Layer A / B / C** | A = paved road artifacts; B = MCP server; C = onboarding (CLI, wizards, docs) |
 | **shop** | Bash CLI for scaffold, publish, verify, and diagnose |
 | **Template** | Pre-built starter project (nextjs, fastapi, streamlit, express, react-spa, svelte-spa) |

@@ -58,7 +58,7 @@ Use terraform outputs per environment:
 Service repos reference:
 
 ```yaml
-uses: your-org/goldenpath/.github/workflows/deploy.yml@v0.3.7
+uses: your-org/goldenpath/.github/workflows/deploy.yml@v0.3.8
 ```
 
 Enable **reusable workflow access** on this repo. Caller workflows need `permissions: id-token: write`.

@@ -19,7 +19,7 @@ shop_env() {
   SHOP_GCP_PROD_PROJECT=my-valid-project \
   SHOP_GCP_REGION=us-central1 \
   SHOP_GOLDENPATH_REPO=goldenpath \
-  SHOP_GOLDENPATH_VERSION=v0.3.7 \
+  SHOP_GOLDENPATH_VERSION=v0.3.8 \
   SHOP_ARTIFACT_REGISTRY_REPO=shop-services \
   "$@"
 }

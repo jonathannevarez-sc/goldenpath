@@ -63,7 +63,7 @@ def sample_enterprise_env(temp_repo: Path) -> Path:
                 "GCP_REGION=us-central1",
                 "GITHUB_ORG=my-github-org",
                 "PLATFORM_REPO=goldenpath",
-                "GOLDENPATH_VERSION=v0.3.7",
+                "GOLDENPATH_VERSION=v0.3.8",
                 "PROTECTED_PROJECTS=protected-name-test,billing-anchor-test",
             ]
         )
@@ -85,7 +85,7 @@ def _replace_scaffold_tokens(
     app_runtime: str = "python",
     health_path: str = "/api/health",
     container_port: str = "8000",
-    goldenpath_version: str = "v0.3.7",
+    goldenpath_version: str = "v0.3.8",
     artifact_registry_repo: str = "shop-services",
 ) -> None:
     """Mirror scripts/lib/scaffold-tokens.sh replace_tokens for test fixtures."""

@@ -216,7 +216,7 @@ If doctor reports removed tags (`v0.3.0`–`v0.3.6`) or a pin not matching `ente
 shop upgrade ../hello-golden
 ```
 
-Only **`v0.3.7`** is published on the platform repo today.
+Only **`v0.3.8`** is published on the platform repo today.
 
 ---
 

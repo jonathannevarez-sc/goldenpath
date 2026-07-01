@@ -1,7 +1,8 @@
 # What Is Golden Path?
 
 ## A simple guide  
-**Platform version:** v0.3.7 · **Date:** 2026-06-24
+
+**Platform version:** v0.3.8 · **Date:** 2026-06-24
 
 ---
 
@@ -126,7 +127,3 @@ The help desk **assists** people. It does **not** replace the factory. If the he
 | A replacement for your cloud or code platform | It sits on top of Google Cloud and GitHub — it organizes how you use them |
 
 ---
-
- 
-
- 

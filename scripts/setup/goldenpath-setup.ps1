@@ -86,16 +86,19 @@ function Invoke-ExternalLive([string]$Exe, [string[]]$ArgumentList, [string]$Wor
             & $Exe @ArgumentList 2>&1 | ForEach-Object {
                 if ($_ -is [System.Management.Automation.ErrorRecord]) {
                     Write-Host $_.ToString() -ForegroundColor Yellow
-                } else {
+                }
+                else {
                     Write-Host $_
                 }
             }
-        } finally {
+        }
+        finally {
             $ErrorActionPreference = $prev
         }
         $exit = if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 }
         return [PSCustomObject]@{ ExitCode = $exit; StdOut = ""; StdErr = "" }
-    } finally {
+    }
+    finally {
         Pop-Location
     }
 }
@@ -107,7 +110,8 @@ function Invoke-External([string]$Exe, [string[]]$ArgumentList, [string]$WorkDir
         try {
             $ErrorActionPreference = "Continue"
             $merged = & $Exe @ArgumentList 2>&1
-        } finally {
+        }
+        finally {
             $ErrorActionPreference = $prev
         }
         $exit = if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 }
@@ -117,7 +121,8 @@ function Invoke-External([string]$Exe, [string[]]$ArgumentList, [string]$WorkDir
         foreach ($line in @($merged)) {
             if ($line -is [System.Management.Automation.ErrorRecord]) {
                 $stderr += $line.ToString()
-            } else {
+            }
+            else {
                 $stdout += [string]$line
             }
         }
@@ -126,7 +131,8 @@ function Invoke-External([string]$Exe, [string[]]$ArgumentList, [string]$WorkDir
             StdOut   = ($stdout -join "`n")
             StdErr   = ($stderr -join "`n")
         }
-    } finally {
+    }
+    finally {
         Pop-Location
     }
 }
@@ -268,7 +274,7 @@ function Show-Usage {
       ../<service-name>/   by default
 
     Templates: nextjs (default), fastapi, streamlit, express, react-spa, svelte-spa
-    Pins workflow to GOLDENPATH_VERSION from enterprise.env (currently v0.3.7).
+    Pins workflow to GOLDENPATH_VERSION from enterprise.env (currently v0.3.8).
 
     Publish does (in order):
       [1/5] Create GitHub repo (visibility matches platform repo)
@@ -366,7 +372,7 @@ function Get-EnterpriseProfile {
 function Get-DefaultConfig {
     $p = Get-EnterpriseProfile
     $sandbox = if ($p.GCP_SANDBOX_PROJECT) { $p.GCP_SANDBOX_PROJECT }
-               elseif ($p.GCP_DEV_PROJECT) { $p.GCP_DEV_PROJECT } else { "" }
+    elseif ($p.GCP_DEV_PROJECT) { $p.GCP_DEV_PROJECT } else { "" }
     $dev = if ($p.GCP_DEV_PROJECT) { $p.GCP_DEV_PROJECT } else { $sandbox }
     $prod = if ($p.GCP_PROD_PROJECT) { $p.GCP_PROD_PROJECT } else { $dev }
 
@@ -419,11 +425,13 @@ function Get-Config {
             if ($null -eq $val) { continue }
             if ($val -is [bool]) {
                 $defaults[$key] = $val
-            } elseif ("$val".Length -gt 0) {
+            }
+            elseif ("$val".Length -gt 0) {
                 $defaults[$key] = "$val"
             }
         }
-    } catch {
+    }
+    catch {
         Write-Warn "Could not read saved config — using defaults."
     }
 
@@ -443,13 +451,13 @@ function Get-Config {
 
     $enterprise = Get-EnterpriseProfile
     foreach ($pair in @(
-        @{ cfg = 'goldenpath_version'; env = 'GOLDENPATH_VERSION' },
-        @{ cfg = 'github_org'; env = 'GITHUB_ORG' },
-        @{ cfg = 'github_platform_repo'; env = 'PLATFORM_REPO' },
-        @{ cfg = 'gcp_dev_project'; env = 'GCP_DEV_PROJECT' },
-        @{ cfg = 'gcp_prod_project'; env = 'GCP_PROD_PROJECT' },
-        @{ cfg = 'gcp_region'; env = 'GCP_REGION' }
-    )) {
+            @{ cfg = 'goldenpath_version'; env = 'GOLDENPATH_VERSION' },
+            @{ cfg = 'github_org'; env = 'GITHUB_ORG' },
+            @{ cfg = 'github_platform_repo'; env = 'PLATFORM_REPO' },
+            @{ cfg = 'gcp_dev_project'; env = 'GCP_DEV_PROJECT' },
+            @{ cfg = 'gcp_prod_project'; env = 'GCP_PROD_PROJECT' },
+            @{ cfg = 'gcp_region'; env = 'GCP_REGION' }
+        )) {
         if ($enterprise.($pair.env)) {
             $defaults.($pair.cfg) = $enterprise.($pair.env)
         }
@@ -463,13 +471,13 @@ function Get-Config {
 function Save-Config($Config) {
     $enterprise = Get-EnterpriseProfile
     foreach ($pair in @(
-        @{ cfg = 'goldenpath_version'; env = 'GOLDENPATH_VERSION' },
-        @{ cfg = 'github_org'; env = 'GITHUB_ORG' },
-        @{ cfg = 'github_platform_repo'; env = 'PLATFORM_REPO' },
-        @{ cfg = 'gcp_dev_project'; env = 'GCP_DEV_PROJECT' },
-        @{ cfg = 'gcp_prod_project'; env = 'GCP_PROD_PROJECT' },
-        @{ cfg = 'gcp_region'; env = 'GCP_REGION' }
-    )) {
+            @{ cfg = 'goldenpath_version'; env = 'GOLDENPATH_VERSION' },
+            @{ cfg = 'github_org'; env = 'GITHUB_ORG' },
+            @{ cfg = 'github_platform_repo'; env = 'PLATFORM_REPO' },
+            @{ cfg = 'gcp_dev_project'; env = 'GCP_DEV_PROJECT' },
+            @{ cfg = 'gcp_prod_project'; env = 'GCP_PROD_PROJECT' },
+            @{ cfg = 'gcp_region'; env = 'GCP_REGION' }
+        )) {
         if ($enterprise.($pair.env)) {
             $Config.($pair.cfg) = $enterprise.($pair.env)
         }
@@ -484,10 +492,10 @@ function Save-Config($Config) {
 function Test-Prerequisites {
     Write-Step 1 1 "Checking prerequisites"
     $required = @(
-        @{ Name = "gcloud";  Install = "https://cloud.google.com/sdk/docs/install" }
+        @{ Name = "gcloud"; Install = "https://cloud.google.com/sdk/docs/install" }
         @{ Name = "terraform"; Install = "https://developer.hashicorp.com/terraform/install" }
-        @{ Name = "git";     Install = "https://git-scm.com/" }
-        @{ Name = "gh";      Install = "https://cli.github.com/" }
+        @{ Name = "git"; Install = "https://git-scm.com/" }
+        @{ Name = "gh"; Install = "https://cli.github.com/" }
     )
     $optional = @("python3", "docker", "pwsh")
 
@@ -495,7 +503,8 @@ function Test-Prerequisites {
     foreach ($tool in $required) {
         if (Test-Command $tool.Name) {
             Write-Ok "$($tool.Name) found"
-        } else {
+        }
+        else {
             Write-Err "$($tool.Name) missing — install: $($tool.Install)"
             $allOk = $false
         }
@@ -513,8 +522,10 @@ function Test-GcloudAuth {
         Write-Warn "Not logged in to gcloud."
         if (Confirm "Open browser for 'gcloud auth login' now?") {
             Invoke-External "gcloud" @("auth", "login") | Out-Null
-        } else { return $false }
-    } else {
+        }
+        else { return $false }
+    }
+    else {
         Write-Ok "gcloud account: $($acct.StdOut.Trim())"
     }
 
@@ -523,8 +534,10 @@ function Test-GcloudAuth {
         Write-Warn "Application Default Credentials not set (Terraform needs these)."
         if (Confirm "Run 'gcloud auth application-default login' now?") {
             Invoke-External "gcloud" @("auth", "application-default", "login") | Out-Null
-        } else { return $false }
-    } else {
+        }
+        else { return $false }
+    }
+    else {
         Write-Ok "Application Default Credentials OK"
     }
     return $true
@@ -587,9 +600,9 @@ function Get-WifFromTerraform([string]$ProjectId) {
     if ($provider.ExitCode -eq 0 -and $sa.ExitCode -eq 0 -and
         (Test-GoldenPathWifProvider $providerValue) -and (Test-GoldenPathWifServiceAccount $saValue)) {
         return [PSCustomObject]@{
-            Provider      = $providerValue
+            Provider       = $providerValue
             ServiceAccount = $saValue
-            Source        = "terraform"
+            Source         = "terraform"
         }
     }
     return $null
@@ -720,7 +733,8 @@ function Set-GitHubSecrets($Config, [string]$Repo) {
 
     if ($r1.ExitCode -eq 0 -and $r2.ExitCode -eq 0) {
         Write-Ok "Secrets set on $fullRepo"
-    } else {
+    }
+    else {
         Write-Err "Failed to set secrets. Run: gh auth login"
         if ($r1.StdErr) { Write-Host $r1.StdErr -ForegroundColor Red }
         if ($r2.StdErr) { Write-Host $r2.StdErr -ForegroundColor Red }
@@ -741,7 +755,8 @@ function Get-InvokeExternalAdapter() {
             try {
                 $ErrorActionPreference = "Continue"
                 $merged = & $Exe @ArgumentList 2>&1
-            } finally {
+            }
+            finally {
                 $ErrorActionPreference = $prev
             }
             $exit = if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 }
@@ -751,7 +766,8 @@ function Get-InvokeExternalAdapter() {
             foreach ($line in @($merged)) {
                 if ($line -is [System.Management.Automation.ErrorRecord]) {
                     $stderr += $line.ToString()
-                } else {
+                }
+                else {
                     $stdout += [string]$line
                 }
             }
@@ -760,7 +776,8 @@ function Get-InvokeExternalAdapter() {
                 StdOut   = ($stdout -join "`n")
                 StdErr   = ($stderr -join "`n")
             }
-        } finally {
+        }
+        finally {
             Pop-Location
         }
     }.GetNewClosure()
@@ -795,7 +812,8 @@ function Invoke-BootstrapStandup($Config) {
     try {
         $adapter = Get-InvokeExternalAdapter
         Invoke-GoldenPathBootstrap -RepoRoot $RepoRoot -Config $Config -InvokeExternal $adapter | Out-Null
-    } catch {
+    }
+    catch {
         Write-Err "Bootstrap failed: $_"
         return $false
     }
@@ -819,7 +837,8 @@ function Show-TemplateList($RepoRoot) {
             Write-Host "  $($prop.Name.PadRight(14)) $($m.app_runtime.PadRight(8)) $($m.container_port.ToString().PadRight(6)) $($m.health_check_path)$def"
         }
         Write-Host ""
-    } catch {
+    }
+    catch {
         Write-Warn "Could not load template catalog: $_"
     }
 }
@@ -876,7 +895,8 @@ function Invoke-ScaffoldService($Config) {
         if (-not (Confirm "Scaffold into project '$($Config.gcp_dev_project)'?" $true)) {
             $Config = Prompt-GcpProject $Config "scaffold + deploy"
         }
-    } else {
+    }
+    else {
         $Config = Prompt-GcpProject $Config "scaffold + deploy"
     }
 
@@ -895,7 +915,8 @@ function Invoke-ScaffoldService($Config) {
     try {
         $result = Invoke-GoldenPathScaffold -RepoRoot $RepoRoot -ServiceName $name -Template $template `
             -OutputDir $scaffoldParent -Config $Config
-    } catch {
+    }
+    catch {
         Write-Err "Scaffold failed: $_"
         return $outcome
     }
@@ -922,7 +943,8 @@ function Invoke-ScaffoldService($Config) {
             $outcome.Publish = $pub
             $outcome.Verify = $pub.Verify
         }
-    } else {
+    }
+    else {
         Write-Host "  When ready: menu option 7 → Publish service to GitHub" -ForegroundColor White
         Write-Host ""
     }
@@ -933,7 +955,8 @@ function Invoke-PublishService($Config, [string]$ServiceDir = "") {
     if (-not $ServiceDir) {
         $defaultDir = if (Get-DefaultServiceDir $Config) {
             Get-DefaultServiceDir $Config
-        } else { Get-ScaffoldOutputDir }
+        }
+        else { Get-ScaffoldOutputDir }
         $ServiceDir = Read-Input "Service directory" $defaultDir
     }
 
@@ -967,10 +990,12 @@ function Invoke-PublishService($Config, [string]$ServiceDir = "") {
             Write-Host "  Actions: https://github.com/$($pub.Repo)/actions" -ForegroundColor DarkGray
             Write-Host "  Retry:   menu 7 (Publish) — WIF trust + deploy rerun are automatic." -ForegroundColor DarkGray
             Write-Host "  Doctor:  menu 9 to list blockers" -ForegroundColor DarkGray
-        } else {
+        }
+        else {
             if ($pub.DeployOk) {
                 Write-Ok "Deploy workflow succeeded"
-            } else {
+            }
+            else {
                 Write-Warn "Deploy watch skipped — checking Cloud Run directly"
             }
             Write-Host ""
@@ -981,9 +1006,11 @@ function Invoke-PublishService($Config, [string]$ServiceDir = "") {
 
             if ($verify.HealthOk) {
                 Write-Ok "Service is live and healthy"
-            } elseif ($verify.Url) {
+            }
+            elseif ($verify.Url) {
                 Write-Warn "Service URL exists but health check not ready — wait 30s and run menu 8"
-            } else {
+            }
+            else {
                 Write-Warn "Cloud Run service not visible yet — check Actions or run menu 8 shortly"
             }
         }
@@ -993,14 +1020,15 @@ function Invoke-PublishService($Config, [string]$ServiceDir = "") {
         Save-Config $Config
 
         return [PSCustomObject]@{
-            Repo         = $pub.Repo
-            ServiceDir   = $ServiceDir
-            ServiceName  = $serviceName
-            CloudRunSvc  = $cloudRunSvc
-            DeployOk     = $pub.DeployOk
-            Verify       = $verify
+            Repo        = $pub.Repo
+            ServiceDir  = $ServiceDir
+            ServiceName = $serviceName
+            CloudRunSvc = $cloudRunSvc
+            DeployOk    = $pub.DeployOk
+            Verify      = $verify
         }
-    } catch {
+    }
+    catch {
         Write-Err "Publish failed: $_"
         Write-Host "  Run menu option 9 (Doctor) to diagnose." -ForegroundColor DarkGray
         return $null
@@ -1010,14 +1038,16 @@ function Invoke-PublishService($Config, [string]$ServiceDir = "") {
 function Invoke-ServiceDoctor($Config) {
     $defaultDir = if (Get-DefaultServiceDir $Config) {
         Get-DefaultServiceDir $Config
-    } else { Get-ScaffoldOutputDir }
+    }
+    else { Get-ScaffoldOutputDir }
     $dir = Read-Input "Service directory" $defaultDir
     $adapter = Get-InvokeExternalAdapter
     $issues = Test-GoldenPathServiceDoctor -ServiceDir $dir -Config $Config -InvokeExternal $adapter -RepoRoot $RepoRoot
     Write-Host ""
     if ($issues.Count -eq 0) {
         Write-Ok "No issues found"
-    } else {
+    }
+    else {
         Write-Host "  Issues:" -ForegroundColor Yellow
         foreach ($i in $issues) { Write-Host "    • $i" -ForegroundColor Yellow }
         Write-Host ""
@@ -1044,7 +1074,8 @@ function Test-Deployment($Config) {
 
     $repo = if ($Config.last_service -and $Config.github_org) {
         "$($Config.github_org)/$($Config.last_service)"
-    } else { "" }
+    }
+    else { "" }
     Show-DeploymentResult -Verify $verify -Repo $repo -Verbose
 
     if (-not $verify.HealthOk) {
@@ -1077,15 +1108,15 @@ function Show-Status($Config) {
     $disposable = if ($Config.sandbox_disposable -eq $true) { 'yes (option 13)' } else { 'no' }
     $lastSvc = if ($Config.last_service) { $Config.last_service } else { '(none)' }
     foreach ($line in @(
-        "Profile         $($Config.profile)"
-        "GCP project     $($Config.gcp_project)"
-        "Region          $($Config.gcp_region)"
-        "GitHub org      $($Config.github_org)"
-        "Platform repo   $($Config.github_platform_repo)"
-        "Disposable      $disposable"
-        "Last service    $lastSvc"
-        "Config file     $ConfigPath"
-    )) {
+            "Profile         $($Config.profile)"
+            "GCP project     $($Config.gcp_project)"
+            "Region          $($Config.gcp_region)"
+            "GitHub org      $($Config.github_org)"
+            "Platform repo   $($Config.github_platform_repo)"
+            "Disposable      $disposable"
+            "Last service    $lastSvc"
+            "Config file     $ConfigPath"
+        )) {
         Write-Host ("  │  " + $line.PadRight(55) + "│")
     }
     Write-Host "  └───────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
@@ -1093,7 +1124,8 @@ function Show-Status($Config) {
     $proj = Invoke-External "gcloud" @("projects", "describe", $Config.gcp_project, "--format=value(lifecycleState)")
     if ($proj.ExitCode -eq 0) {
         Write-Ok "GCP project exists ($($proj.StdOut.Trim()))"
-    } else {
+    }
+    else {
         Write-Warn "GCP project not found — run bootstrap (option 3)"
     }
 
@@ -1103,14 +1135,16 @@ function Show-Status($Config) {
     )
     if ($ar.ExitCode -eq 0 -and $ar.StdOut.Trim()) {
         Write-Ok "Artifact Registry configured"
-    } else {
+    }
+    else {
         Write-Warn "No Artifact Registry — bootstrap may not have run"
     }
 
     $wif = Get-WifCredentials $Config.gcp_project
     if ($wif) {
         Write-Ok "WIF credentials available (via $($wif.Source))"
-    } else {
+    }
+    else {
         Write-Warn "WIF credentials not found"
     }
 
@@ -1142,7 +1176,8 @@ function New-McpClaudeConfig($Config) {
             $pip = if ($IsWindows) { Join-Path $mcpDir ".venv/Scripts/pip" } else { Join-Path $mcpDir ".venv/bin/pip" }
             Invoke-External $pip @("install", "-r", (Join-Path $mcpDir "requirements.txt")) | Out-Null
             Write-Ok "MCP venv created"
-        } else { return }
+        }
+        else { return }
     }
 
     $outPath = Join-Path $mcpDir "claude-mcp.generated.json"
@@ -1201,9 +1236,9 @@ function Prompt-GcpProject($Config, [string]$Purpose, [string]$DefaultProject = 
     }
 
     $default = if ($DefaultProject) { $DefaultProject }
-               elseif ($previousDevProject) { $previousDevProject }
-               elseif ($Config.gcp_project) { $Config.gcp_project }
-               else { "" }
+    elseif ($previousDevProject) { $previousDevProject }
+    elseif ($Config.gcp_project) { $Config.gcp_project }
+    else { "" }
     $project = Read-ValidatedProjectId "GCP project ID" $default
 
     if ($previousDevProject -and $previousDevProject -ne $project) {
@@ -1216,7 +1251,8 @@ function Prompt-GcpProject($Config, [string]$Purpose, [string]$DefaultProject = 
     $Config.gcp_dev_project = $project
     if (Confirm "Use '$project' for both dev and prod deploys?" $true) {
         $Config.gcp_prod_project = $project
-    } else {
+    }
+    else {
         $Config.gcp_prod_project = Read-ValidatedProjectId "GCP prod project ID" $project
     }
 
@@ -1234,7 +1270,8 @@ function Test-ScaffoldProjectMatch($Config, [string]$ServiceDir) {
         if ($found -ne $Config.gcp_dev_project) {
             Write-Err "Scaffold project_id is '$found' but wizard has '$($Config.gcp_dev_project)'"
             Write-Warn "Re-run scaffold after setting the correct project in menu option 12 or 6."
-        } else {
+        }
+        else {
             Write-Ok "infra/dev.tfvars project_id matches wizard ($found)"
         }
     }
@@ -1256,7 +1293,8 @@ function Edit-Config($Config) {
         Write-Host ""
         Write-Host "  Sandbox defaults come from config/enterprise.env — confirm or enter your project." -ForegroundColor DarkGray
         $Config = Prompt-GcpProject $Config "sandbox"
-    } elseif ($choice -eq 1) {
+    }
+    elseif ($choice -eq 1) {
         $Config.profile = "sandbox"
         $Config.sandbox_disposable = $true
         Write-Host ""
@@ -1271,7 +1309,8 @@ function Edit-Config($Config) {
         $Config.gcp_region = Read-Input "GCP region" $Config.gcp_region
         $Config.github_org = Read-Input "GitHub org or username" $Config.github_org
         $Config.github_platform_repo = Read-Input "Platform repo name" $Config.github_platform_repo
-    } else {
+    }
+    else {
         $Config.profile = "custom"
         $Config.sandbox_disposable = $false
         $Config = Prompt-GcpProject $Config "existing GCP project"
@@ -1341,7 +1380,8 @@ function Invoke-TeardownSandbox($Config) {
         $adapter = Get-InvokeExternalAdapter
         Invoke-GoldenPathTeardown -RepoRoot $RepoRoot -DeleteProject:$deleteProject -InvokeExternal $adapter `
             -ExpectedProjectId $Config.gcp_project -ProtectedProjects (Get-ProtectedProjectsFromEnv)
-    } catch {
+    }
+    catch {
         Write-Err "Teardown failed: $_"
         return
     }
@@ -1360,7 +1400,8 @@ function Show-WizardCompletion($Config, $WizardState) {
     Write-Host "    Profile        $($Config.profile) → $($Config.gcp_project) ($($Config.gcp_region))"
     if ($WizardState.BootstrapRan) {
         Write-Host "    Bootstrap      ✓ GCP project + Terraform + Artifact Registry" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "    Bootstrap      skipped — run menu 3 when ready" -ForegroundColor DarkGray
     }
     if ($Config.wif_provider) {
@@ -1376,13 +1417,16 @@ function Show-WizardCompletion($Config, $WizardState) {
                 if ($WizardState.Verify.HealthOk) {
                     Write-Host "    Health         $($WizardState.Verify.HealthPath) → HTTP $($WizardState.Verify.StatusCode)" -ForegroundColor Green
                 }
-            } elseif ($WizardState.Publish.DeployOk -eq $false) {
+            }
+            elseif ($WizardState.Publish.DeployOk -eq $false) {
                 Write-Host "    Deploy         ✗ workflow failed — see Actions tab" -ForegroundColor Yellow
             }
-        } elseif (-not $WizardState.Published) {
+        }
+        elseif (-not $WizardState.Published) {
             Write-Host "    Publish        not yet — menu 7 when ready" -ForegroundColor DarkGray
         }
-    } else {
+    }
+    else {
         Write-Host "    Service        none yet — menu 6 to scaffold" -ForegroundColor DarkGray
     }
 
@@ -1396,18 +1440,22 @@ function Show-WizardCompletion($Config, $WizardState) {
         Write-Host "    # edit your code, then:"
         Write-Host '    git add . && git commit -m "your change" && git push'
         Write-Host "    → GitHub Actions deploys to $($WizardState.Publish.CloudRunSvc) automatically"
-    } elseif ($WizardState.Published -and $WizardState.Publish -and $WizardState.Publish.DeployOk -eq $false) {
+    }
+    elseif ($WizardState.Published -and $WizardState.Publish -and $WizardState.Publish.DeployOk -eq $false) {
         Write-Host "  Next steps (deploy failed):" -ForegroundColor White
         Write-Host "    1. Open https://github.com/$($WizardState.Publish.Repo)/actions"
         Write-Host "    2. Fix the error, or run menu 9 (Doctor)"
         Write-Host "    3. Re-run menu 7 (Publish) to retry deploy + verify"
-    } elseif ($WizardState.ServiceName -and -not $WizardState.Published) {
+    }
+    elseif ($WizardState.ServiceName -and -not $WizardState.Published) {
         Write-Host "  Next step:" -ForegroundColor White
         Write-Host "    Menu 7 — Publish $($WizardState.ServiceName) to GitHub (repo + deploy + verify)"
-    } elseif (-not $WizardState.ServiceName) {
+    }
+    elseif (-not $WizardState.ServiceName) {
         Write-Host "  Next step:" -ForegroundColor White
         Write-Host "    Menu 6 — Scaffold your first service, then menu 7 to publish"
-    } else {
+    }
+    else {
         Write-Host "  Next step:" -ForegroundColor White
         Write-Host "    Menu 8 — Verify deployment, or wait a minute and re-run publish (menu 7)"
     }
@@ -1462,7 +1510,8 @@ function Start-FullWizard {
     Write-Host ""
     if (Confirm "Run bootstrap now?") {
         $wizardState.BootstrapRan = [bool](Invoke-BootstrapStandup $Config)
-    } else {
+    }
+    else {
         Write-Warn "Skipped — you can run it later from the main menu (option 3)."
     }
     $Config = Get-Config
@@ -1490,7 +1539,8 @@ function Start-FullWizard {
             $wizardState.Publish = $scaffold.Publish
             $wizardState.Verify = $scaffold.Verify
         }
-    } else {
+    }
+    else {
         Write-Host "  Skip for now — menu 6 (scaffold) and menu 7 (publish) later."
     }
     Press-Enter
@@ -1498,7 +1548,8 @@ function Start-FullWizard {
     Write-Step 6 $total "MCP for Claude (optional)"
     if (Confirm "Generate Claude MCP config?") {
         New-McpClaudeConfig $Config
-    } else {
+    }
+    else {
         Write-Host "  Skipped — menu 10 anytime."
     }
 
@@ -1583,11 +1634,14 @@ if ($MyInvocation.InvocationName -ne '.') {
     Set-Location $RepoRoot
     if ($args -contains "--help" -or $args -contains "-h" -or $args -contains "-?") {
         Show-Usage
-    } elseif ($args -contains "--dryrun") {
+    }
+    elseif ($args -contains "--dryrun") {
         Invoke-DryRunWizard | Out-Null
-    } elseif ($args -contains "--wizard") {
+    }
+    elseif ($args -contains "--wizard") {
         Start-FullWizard
-    } else {
+    }
+    else {
         Show-MainMenu
     }
 }

@@ -14,7 +14,7 @@ try {
     $Config = @{
         github_org           = 'test-org'
         github_platform_repo = 'goldenpath'
-        goldenpath_version   = 'v0.3.7'
+        goldenpath_version   = 'v0.3.8'
         gcp_dev_project      = 'gp-test-smoke-01'
         gcp_prod_project     = 'gp-test-smoke-01'
         gcp_region           = 'us-central1'
@@ -84,19 +84,22 @@ artifact_registry_id = "containers"
         try {
             Invoke-GoldenPathTeardown -RepoRoot $RepoRoot -DeleteProject:$false `
                 -InvokeExternal $adapter -ExpectedProjectId 'gp-test-smoke-01' -ProtectedProjects @() | Out-Null
-        } catch {
+        }
+        catch {
             if ($_.Exception.Message -notmatch 'terraform.tfvars targets') { throw }
             $threw = $true
         }
         if (-not $threw) { throw 'teardown should refuse config/tfvars project mismatch' }
         Write-Host 'PASS teardown project mismatch guard'
-    } finally {
+    }
+    finally {
         if ($hadTfvars) { Set-Content -Path $tfvars -Value $orig -NoNewline -Encoding UTF8 }
         elseif (Test-Path $tfvars) { Remove-Item $tfvars -Force }
     }
 
     Write-Host ''
     Write-Host 'All PS module smoke tests passed.' -ForegroundColor Green
-} finally {
+}
+finally {
     Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
 }

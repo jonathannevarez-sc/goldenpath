@@ -1,7 +1,7 @@
 # Golden Path MCP server
 
 **Phase:** 2 — AI-assisted developer experience (Layer B)  
-**Release:** `v0.3.7`  
+**Release:** `v0.3.8`  
 **Status:** Implemented
 
 > **Start here:** [guide.md](./guide.md) — what MCP does and doesn't do, local vs Cloud Run setup.

@@ -304,6 +304,7 @@ Replace §5 Layer B and related sections with language along these lines:
 
 > **Layer B — Golden Path MCP Server**  
 > A single hosted MCP server provides the AI-assisted developer experience:  
+>
 > - **Resources** — versioned skills and documentation from the `goldenpath` GitHub repository (read-only for developers; maintained by platform admins).
 > - **Tools** — platform actions and live data (service catalog, deploy status, scaffolding, guarded deploy triggers).  
 >  
@@ -339,7 +340,7 @@ Close §7 (Skill distribution) as: **MCP Resources from pinned git releases, wit
 
 ---
 
-## Related analysis (v0.3.7)
+## Related analysis (v0.3.8)
 
 - [Coverage check](./golden-path-mcp-evolution-coverage-check.md) — requirement-by-requirement: does the project cover what the proposal asked for?
 - [Parity analysis](./golden-path-mcp-evolution-parity-analysis.md) — side-by-side: how closely does delivery match proposal shape and intent?

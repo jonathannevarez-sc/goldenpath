@@ -60,7 +60,7 @@ def test_sandbox_publish_verify_smoke(require_integration: None, tmp_path_factor
     env.setdefault("SHOP_GCP_PROD_PROJECT", env["SHOP_GCP_DEV_PROJECT"])
     env.setdefault("SHOP_GCP_REGION", env.get("GCP_REGION", "us-central1"))
     env.setdefault("SHOP_GOLDENPATH_REPO", "goldenpath")
-    env.setdefault("SHOP_GOLDENPATH_VERSION", "v0.3.7")
+    env.setdefault("SHOP_GOLDENPATH_VERSION", "v0.3.8")
 
     subprocess.run(
         [str(SHOP), "new", service, "--template", "fastapi", "--output", str(work)],
